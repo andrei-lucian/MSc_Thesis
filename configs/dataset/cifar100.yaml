@@ -1,0 +1,6 @@
+name: CIFAR100
+root: ./data
+num_classes: 100
+augment: standard
+batch_size: 64
+label_noise: 0.0

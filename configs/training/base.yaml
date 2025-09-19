@@ -1,0 +1,7 @@
+epochs: 200
+batch_size: 128
+optimizer: sgd
+lr: 0.1
+momentum: 0.9
+weight_decay: 5e-4
+lr_schedule: cosine

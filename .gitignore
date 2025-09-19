@@ -3,3 +3,5 @@ data/
 
 # Optional: Ignore all hidden files in the data folder
 data/.*
+
+.venv/

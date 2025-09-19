@@ -1,0 +1,11 @@
+# Main entrypoint
+defaults:
+  - model: resnet18
+  - dataset: cifar100
+  - training: base
+  - _self_
+
+experiment:
+  name: default
+  seed: 0
+  output_dir: outputs/${experiment.name}
