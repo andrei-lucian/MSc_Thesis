@@ -1,7 +1,5 @@
-# Ignore the data folder
-data/
-
-# Optional: Ignore all hidden files in the data folder
-data/.*
+# Ignore only the top-level data directory
+/data/
+/data/.*
 
 .venv/
