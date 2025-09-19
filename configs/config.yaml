@@ -1,7 +1,16 @@
+hydra:
+  job:
+    chdir: true           # Hydra cd's into the run dir before calling main()
+  run:
+    dir: outputs/${experiment.name}/${now:%Y-%m-%d_%H-%M-%S}
+  sweep:
+    dir: multirun/${now:%Y-%m-%d_%H-%M-%S}
+    subdir: ${experiment.name}/${model.arch}_width${model.width_multiplier}_seed${experiment.seed}
+
 # Main entrypoint
 defaults:
   - model: resnet18
-  - dataset: cifar100
+  - dataset: cifar10
   - training: base
   - _self_
 
