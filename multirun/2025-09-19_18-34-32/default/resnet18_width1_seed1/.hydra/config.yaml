@@ -1,0 +1,23 @@
+model:
+  arch: resnet18
+  width_multiplier: 1
+  pretrained: false
+dataset:
+  name: CIFAR10
+  root: ./data
+  num_classes: 10
+  augment: standard
+  batch_size: 128
+  label_noise: 0.15
+training:
+  epochs: 1000
+  batch_size: 128
+  optimizer: sgd
+  lr: 0.0001
+  momentum: 0
+  weight_decay: 0.0005
+  lr_schedule: cosine
+experiment:
+  name: default
+  seed: 1
+  output_dir: outputs/${experiment.name}
