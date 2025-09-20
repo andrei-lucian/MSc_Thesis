@@ -1,6 +1,5 @@
 import torch.nn as nn
 
-
 # -------------------------------
 # Pre-activation BasicBlock
 # -------------------------------
@@ -26,27 +25,26 @@ class PreActBasicBlock(nn.Module):
                                       stride=stride, bias=False)
 
     def forward(self, x):
-        out = self.relu1(self.bn1(x))	 # <-- Hook sees preactivation here after bn1
+        out = self.relu1(self.bn1(x))   # <-- preactivation before first conv
         shortcut = self.shortcut(out) if self.shortcut is not None else x
         out = self.conv1(out)
-        out = self.conv2(self.relu2(self.bn2(out)))	 # <-- Hook sees preactivation here after bn2
+        out = self.conv2(self.relu2(self.bn2(out)))  # <-- preactivation before second conv
         out += shortcut
         return out
 
 
 # -------------------------------
-# Pre-activation ResNet
+# Pre-activation ResNet (CIFAR style stem)
 # -------------------------------
 class PreActResNet(nn.Module):
-    def __init__(self, block, layers, k=64, num_classes=100):
+    def __init__(self, block, layers, k=64, num_classes=10):
         super().__init__()
         self.in_planes = k
 
-        # stem
-        self.conv1 = nn.Conv2d(3, k, kernel_size=7, stride=2, padding=3, bias=False)
+        # CIFAR-style stem: 3×3 conv, stride=1, no maxpool
+        self.conv1 = nn.Conv2d(3, k, kernel_size=3, stride=1, padding=1, bias=False)
         self.bn1 = nn.BatchNorm2d(k)
         self.relu = nn.ReLU(inplace=True)
-        self.maxpool = nn.MaxPool2d(kernel_size=3, stride=2, padding=1)
 
         # four stages with [k, 2k, 4k, 8k] channels
         self.layer1 = self._make_layer(block, k, layers[0], stride=1)
@@ -69,7 +67,6 @@ class PreActResNet(nn.Module):
         x = self.conv1(x)
         x = self.bn1(x)
         x = self.relu(x)
-        x = self.maxpool(x)
 
         x = self.layer1(x)
         x = self.layer2(x)
@@ -85,13 +82,13 @@ class PreActResNet(nn.Module):
 # -------------------------------
 # Factory functions
 # -------------------------------
-def resnet18_preact(num_classes=100, k=64):
-    """Pre-activation ResNet-18 with [k, 2k, 4k, 8k] channels"""
+def resnet18_preact(num_classes=10, k=64):
+    """Pre-activation ResNet-18 with CIFAR-style stem and [k, 2k, 4k, 8k] channels"""
     return PreActResNet(PreActBasicBlock, [2, 2, 2, 2], k=k, num_classes=num_classes)
 
 
-def resnet34_preact(num_classes=100, k=64):
-    """Pre-activation ResNet-34 with [k, 2k, 4k, 8k] channels"""
+def resnet34_preact(num_classes=10, k=64):
+    """Pre-activation ResNet-34 with CIFAR-style stem and [k, 2k, 4k, 8k] channels"""
     return PreActResNet(PreActBasicBlock, [3, 4, 6, 3], k=k, num_classes=num_classes)
 
 
