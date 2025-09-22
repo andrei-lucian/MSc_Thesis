@@ -1,7 +1,7 @@
-epochs: 1000
+epochs: 100
 batch_size: 128
 optimizer: adam      #sgd or adam
 lr: 1e-4
 momentum: 0
 weight_decay: 5e-4
-lr_schedule: cosine
+lr_schedule: inverse_sqrt

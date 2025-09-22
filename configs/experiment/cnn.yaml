@@ -1,0 +1,20 @@
+# @package _global_
+defaults:
+  - override /model: simplecnn
+  - override /dataset: cifar10
+  - override /training: base
+  - _self_
+
+name: cnn
+seed: 0
+
+model:
+  width: 7 
+
+training:
+  epochs: 1
+  optimizer: sgd
+  lr: 0.1
+
+dataset:
+  label_noise: 0.1

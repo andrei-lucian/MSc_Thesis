@@ -4,6 +4,7 @@ import torch.optim as optim
 from torch.utils.data import DataLoader
 from pathlib import Path
 import csv
+from torch.optim.lr_scheduler import LambdaLR
 from src.metrics.preactivation import PreactivationLogger
 import os
 
@@ -18,7 +19,6 @@ class Trainer:
 		self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 		self.model.to(self.device)
 
-		# Optimizer
 		if cfg.training.optimizer == "sgd":
 			self.optimizer = optim.SGD(
 				self.model.parameters(),
@@ -30,6 +30,18 @@ class Trainer:
 			self.optimizer = optim.Adam(self.model.parameters(), lr=cfg.training.lr)
 		else:
 			raise ValueError(f"Unknown optimizer: {cfg.training.optimizer}")
+		
+		# Learning rate schedule
+		if cfg.training.lr_schedule == "inverse_sqrt":
+			def lr_lambda(step):
+				return 1.0 / ( (1 + step // 512) ** 0.5 )
+			self.scheduler = LambdaLR(self.optimizer, lr_lambda=lr_lambda)
+		elif cfg.training.lr_schedule == "cosine":
+			self.scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(
+				self.optimizer, T_max=cfg.training.epochs
+			)
+		else:
+			self.scheduler = None
 
 		# Loss
 		self.criterion = nn.CrossEntropyLoss()
@@ -73,12 +85,15 @@ class Trainer:
 
 		for x, y in self.train_loader:
 			x, y = x.to(self.device), y.to(self.device)
-
+			
 			self.optimizer.zero_grad()
 			out = self.model(x)
 			loss = self.criterion(out, y)
 			loss.backward()
 			self.optimizer.step()
+
+			if self.scheduler is not None:
+				self.scheduler.step()
 
 			total_loss += loss.item() * x.size(0)
 			_, preds = out.max(1)

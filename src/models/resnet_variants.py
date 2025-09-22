@@ -90,13 +90,3 @@ def resnet18_preact(num_classes=10, k=64):
 def resnet34_preact(num_classes=10, k=64):
     """Pre-activation ResNet-34 with CIFAR-style stem and [k, 2k, 4k, 8k] channels"""
     return PreActResNet(PreActBasicBlock, [3, 4, 6, 3], k=k, num_classes=num_classes)
-
-
-def get_model(cfg, num_classes):
-    arch = cfg.arch.lower()
-    if arch == "resnet18":
-        return resnet18_preact(num_classes=num_classes, k=int(64 * cfg.width_multiplier))
-    elif arch == "resnet34":
-        return resnet34_preact(num_classes=num_classes, k=int(64 * cfg.width_multiplier))
-    else:
-        raise ValueError(f"Unknown architecture: {cfg.arch}")

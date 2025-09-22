@@ -120,8 +120,8 @@ hydra:
     name: main
     chdir: true
     override_dirname: experiment.seed=1,model.width_multiplier=0.2,model=resnet18,training.epochs=1000
-    id: '3'
-    num: 3
+    id: '0'
+    num: 0
     config_name: config
     env_set: {}
     env_copy: []
@@ -144,7 +144,7 @@ hydra:
     - path: ''
       schema: structured
       provider: schema
-    output_dir: /vast.mnt/home/20233308/MSc_Thesis/multirun/2025-09-21_13-55-16/default/resnet18_width0.2_seed1
+    output_dir: /vast.mnt/home/20233308/MSc_Thesis/multirun/2025-09-22_09-44-22/default/resnet18_width0.2_seed1
     choices:
       training: base
       dataset: cifar10

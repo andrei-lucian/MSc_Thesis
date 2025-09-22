@@ -1,0 +1,19 @@
+# @package _global_
+defaults:
+  - override /model: resnet18
+  - override /dataset: cifar10
+  - override /training: base
+  - _self_
+
+name: cnn
+seed: 0
+
+model:
+  width: 4  
+
+training:
+  epochs: 1000
+  optimizer: adam
+
+dataset:
+  label_noise: 0.15

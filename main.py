@@ -5,7 +5,7 @@ import os
 # Import modules
 from src.utils.seed import set_seed
 from src.data.cifar import get_dataset
-from src.models.resnet_variants import get_model
+from src.models.factory import get_model
 from src.training.trainer import Trainer
 
 @hydra.main(config_path="configs", config_name="config", version_base=None)

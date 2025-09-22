@@ -52,6 +52,9 @@ def get_dataset(cfg, seed):
 			transforms.RandomHorizontalFlip(),
 			transforms.ToTensor()
 		]
+	if cfg.augment == "none":
+		transform_list = [transforms.ToTensor()]	
+
 	transform = transforms.Compose(transform_list)
 	
 	train_dataset = datasets.__dict__[cfg.name](

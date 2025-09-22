@@ -5,13 +5,14 @@ hydra:
     dir: outputs/${experiment.name}/${now:%Y-%m-%d_%H-%M-%S}
   sweep:
     dir: multirun/${now:%Y-%m-%d_%H-%M-%S}
-    subdir: ${experiment.name}/${model.arch}_width${model.width_multiplier}_seed${experiment.seed}
+    subdir: ${experiment.name}/${model.arch}_width${model.width}_seed${experiment.seed}
 
 # Main entrypoint
 defaults:
   - model: resnet18
   - dataset: cifar10
   - training: base
+  - experiment: default
   - _self_
 
 experiment:
