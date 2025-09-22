@@ -12,7 +12,7 @@ model:
   width: 7 
 
 training:
-  epochs: 1
+  epochs: 1000
   optimizer: sgd
   lr: 0.1
 
