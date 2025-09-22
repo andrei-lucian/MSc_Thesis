@@ -1,0 +1,4 @@
+- model=resnet18
+- model.width_multiplier=0.2
+- experiment.seed=1
+- training.epochs=1000
