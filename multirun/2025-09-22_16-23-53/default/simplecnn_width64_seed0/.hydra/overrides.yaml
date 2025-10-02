@@ -1,0 +1,3 @@
+- experiment=cnn
+- model.width=64
+- seed=1

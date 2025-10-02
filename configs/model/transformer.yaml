@@ -1,0 +1,10 @@
+arch: transformer
+trainer: seq2seq   # tells main() to use Seq2SeqTrainer
+
+# Transformer architecture
+width: 104
+nhead: 8
+num_layers: 6
+dropout: 0.0
+tie_decoder_embeddings: true
+max_len: 5000

@@ -1,3 +1,4 @@
 arch: simplecnn
 width: 64
 pretrained: false
+trainer: classification

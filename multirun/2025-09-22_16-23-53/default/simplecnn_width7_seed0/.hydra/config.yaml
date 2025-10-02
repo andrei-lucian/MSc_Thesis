@@ -1,0 +1,25 @@
+model:
+  arch: simplecnn
+  width: 7
+  pretrained: false
+dataset:
+  name: CIFAR10
+  root: ./data
+  num_classes: 10
+  augment: standard
+  batch_size: 128
+  label_noise: 0.1
+training:
+  epochs: 1
+  batch_size: 128
+  optimizer: sgd
+  lr: 0.1
+  momentum: 0
+  weight_decay: 0.0005
+  lr_schedule: inverse_sqrt
+name: cnn
+seed: 1
+experiment:
+  name: default
+  seed: 0
+  output_dir: outputs/${experiment.name}

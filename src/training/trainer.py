@@ -65,7 +65,7 @@ class Trainer:
 			writer.writerow(["arch", "width", "seed", "noise", "params"])
 			writer.writerow([
 				cfg.model.arch,
-				getattr(cfg.model, "width_multiplier", None),
+				getattr(cfg.model, "width", None),
 				cfg.experiment.seed,
 				getattr(cfg.dataset, "label_noise", 0.0),
 				self.num_params,

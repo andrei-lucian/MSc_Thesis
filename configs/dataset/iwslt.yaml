@@ -1,0 +1,20 @@
+name: iwslt14
+src_lang: de
+tgt_lang: en
+
+# Where to store/download preprocessed data
+data_dir: data/iwslt14
+
+tokenizer_model: data/iwslt14/iwslt14_bpe.model
+src_vocab_size: 32000
+tgt_vocab_size: 32000
+pad_idx: 0
+bos_idx: 1
+eos_idx: 2
+
+# Batching
+batch_size: 64
+num_workers: 4
+max_len: 200   # optional safeguard to truncate very long sentences
+
+subset_fraction: 0.01

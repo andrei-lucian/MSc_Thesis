@@ -1,0 +1,16 @@
+# @package _global_
+defaults:
+  - override /model: transformer
+  - override /dataset: iwslt
+  - override /training: base
+  - _self_
+
+name: transformer
+seed: 0
+
+training:
+  epochs: 80
+  optimizer: adam
+  lr: 0.0005
+  warmup_steps: 4000
+  label_smoothing: 0.1

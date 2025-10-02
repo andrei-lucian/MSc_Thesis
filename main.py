@@ -3,8 +3,9 @@ from omegaconf import DictConfig, OmegaConf
 import os
 
 # Import modules
+from src.training.seq2seq_trainer import Seq2SeqTrainer
 from src.utils.seed import set_seed
-from src.data.cifar import get_dataset
+from src.data.factory import get_dataset
 from src.models.factory import get_model
 from src.training.trainer import Trainer
 
@@ -17,16 +18,24 @@ def main(cfg: DictConfig):
 	set_seed(cfg.experiment.seed)
 
 	# Build dataset
-	train_loader, test_loader, num_classes = get_dataset(cfg.dataset, cfg.experiment.seed)
+	train_loader, test_loader, extra = get_dataset(cfg.dataset, cfg.experiment.seed)
 	
 	# Build model
-	model = get_model(cfg.model, num_classes)
+	if isinstance(extra, tuple):  # IWSLT
+		src_vocab_size, tgt_vocab_size = extra
+		model = get_model(cfg.model, src_vocab_size, tgt_vocab_size)
+	else:  # CIFAR
+		num_classes = extra
+		model = get_model(cfg.model, num_classes)
 
 	num_params = sum(p.numel() for p in model.parameters())
 	print(f"Total parameters: {num_params:,}")
 	
-	# Build trainer and run
-	trainer = Trainer(model, train_loader, test_loader, cfg)
+	if cfg.model.trainer == "seq2seq":
+		trainer = Seq2SeqTrainer(model, train_loader, test_loader, cfg)
+	else:
+		trainer = Trainer(model, train_loader, test_loader, cfg)
+
 	trainer.run()
 	
 	print(f"Experiment finished. Outputs saved to {os.getcwd()}")
