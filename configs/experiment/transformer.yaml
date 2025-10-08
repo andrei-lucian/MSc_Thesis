@@ -9,7 +9,7 @@ name: transformer
 seed: 0
 
 training:
-  epochs: 80
+  epochs: 30
   optimizer: adam
   lr: 0.0005
   warmup_steps: 4000

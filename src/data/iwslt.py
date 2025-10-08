@@ -117,16 +117,19 @@ def get_iwslt14(cfg):
 	# ---- Subsample for debugging ----
 	if getattr(cfg, "subset_fraction", None):
 		frac = cfg.subset_fraction
-		dataset["train"] = dataset["train"].train_test_split(
-			test_size=1-frac, seed=1
-		)["train"]
-		dataset["validation"] = dataset["validation"].train_test_split(
-			test_size=1-frac, seed=1
-		)["train"]
-		dataset["test"] = dataset["test"].train_test_split(
-			test_size=1-frac, seed=1
-		)["train"]
-		print(f"⚡ Using {frac*100:.0f}% of data for quick testing")
+		if frac < 1.0:
+			dataset["train"] = dataset["train"].train_test_split(
+				test_size=1-frac, seed=1
+			)["train"]
+			dataset["validation"] = dataset["validation"].train_test_split(
+				test_size=1-frac, seed=1
+			)["train"]
+			dataset["test"] = dataset["test"].train_test_split(
+				test_size=1-frac, seed=1
+			)["train"]
+			print(f"Using {frac*100:.0f}% of data")
+		else:
+			print("Using 100% of the data (no subsampling)")
 		
 	spm_path = Path(cfg.tokenizer_model)
 	if not spm_path.is_absolute():

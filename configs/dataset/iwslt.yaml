@@ -17,4 +17,4 @@ batch_size: 64
 num_workers: 4
 max_len: 200   # optional safeguard to truncate very long sentences
 
-subset_fraction: 0.01
+subset_fraction: 1.0
