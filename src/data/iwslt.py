@@ -173,4 +173,10 @@ def get_iwslt14(cfg):
 		num_workers=cfg.num_workers, collate_fn=collate
 	)
 
+	for batch in train_loader:
+		src, tgt, *_ = batch
+		print("SRC:", tokenizer.decode(src[0].tolist()))
+		print("TGT:", tokenizer.decode(tgt[0].tolist()))
+		break
+
 	return train_loader, test_loader, (cfg.src_vocab_size, cfg.tgt_vocab_size)

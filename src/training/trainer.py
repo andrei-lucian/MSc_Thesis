@@ -19,6 +19,9 @@ class Trainer:
 		self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 		self.model.to(self.device)
 
+		# ------------------------------
+		# Optimizer setup
+		# ------------------------------
 		if cfg.training.optimizer == "sgd":
 			self.optimizer = optim.SGD(
 				self.model.parameters(),
@@ -26,42 +29,60 @@ class Trainer:
 				momentum=cfg.training.momentum,
 				weight_decay=cfg.training.weight_decay,
 			)
-		elif cfg.training.optimizer == "adam":
-			self.optimizer = optim.Adam(self.model.parameters(), lr=cfg.training.lr)
-		else:
-			raise ValueError(f"Unknown optimizer: {cfg.training.optimizer}")
-		
-		# Learning rate schedule
-		if cfg.training.lr_schedule == "inverse_sqrt":
-			def lr_lambda(step):
-				return 1.0 / ( (1 + step // 512) ** 0.5 )
-			self.scheduler = LambdaLR(self.optimizer, lr_lambda=lr_lambda)
-		elif cfg.training.lr_schedule == "cosine":
-			self.scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(
-				self.optimizer, T_max=cfg.training.epochs
-			)
-		else:
 			self.scheduler = None
 
-		# Loss
+		elif cfg.training.optimizer == "adam":
+			# Use Transformer paper settings if inverse_sqrt schedule
+			if cfg.training.lr_schedule == "inverse_sqrt":
+				self.optimizer = optim.Adam(
+					self.model.parameters(),
+					lr=1.0,  # Base LR = 1, schedule handles scaling
+					betas=(0.9, 0.98),
+					eps=1e-9
+				)
+
+				def lr_lambda(step):
+					step = max(1, step)
+					d_model = getattr(cfg.model, "width", 512)
+					warmup = getattr(cfg.training, "warmup_steps", 4000)
+					return (d_model ** -0.5) * min(step ** -0.5, step * (warmup ** -1.5))
+
+				self.scheduler = LambdaLR(self.optimizer, lr_lambda=lr_lambda)
+
+			elif cfg.training.lr_schedule == "cosine":
+				self.optimizer = optim.Adam(self.model.parameters(), lr=cfg.training.lr)
+				self.scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(
+					self.optimizer, T_max=cfg.training.epochs
+				)
+			else:
+				self.optimizer = optim.Adam(self.model.parameters(), lr=cfg.training.lr)
+				self.scheduler = None
+
+		else:
+			raise ValueError(f"Unknown optimizer: {cfg.training.optimizer}")
+
+		# ------------------------------
+		# Loss function
+		# ------------------------------
 		self.criterion = nn.CrossEntropyLoss()
 
+		# ------------------------------
 		# Preactivation logger
+		# ------------------------------
 		self.preact_logger = PreactivationLogger(self.model)
 
-		# Hydra automatically sets cwd to the run directory
+		# ------------------------------
+		# Output + logging setup
+		# ------------------------------
 		self.out_dir = Path(os.getcwd())
 		self.out_dir.mkdir(parents=True, exist_ok=True)
 
-		# Count parameters
 		self.num_params = sum(p.numel() for p in self.model.parameters())
 
-		# CSV log file
 		self.log_file = self.out_dir / "metrics.csv"
 		with open(self.log_file, "w", newline="") as f:
 			writer = csv.writer(f)
-
-			# Metadata row
+			# Metadata
 			writer.writerow(["arch", "width", "seed", "noise", "params"])
 			writer.writerow([
 				cfg.model.arch,
@@ -71,21 +92,21 @@ class Trainer:
 				self.num_params,
 			])
 
-			# Metrics header
-			header = [
-				"epoch", "train_loss", "train_acc",
-				"test_loss", "test_acc"
-			]
+			# Header row
+			header = ["epoch", "train_loss", "train_acc", "test_loss", "test_acc"]
 			header += [f"p_layer{i}" for i in range(len(self.preact_logger.layers))]
 			writer.writerow(header)
 
+	# ------------------------------
+	# Training for one epoch
+	# ------------------------------
 	def train_one_epoch(self):
 		self.model.train()
 		total_loss, correct, total = 0, 0, 0
 
-		for x, y in self.train_loader:
+		for step, (x, y) in enumerate(self.train_loader):
 			x, y = x.to(self.device), y.to(self.device)
-			
+
 			self.optimizer.zero_grad()
 			out = self.model(x)
 			loss = self.criterion(out, y)
@@ -100,8 +121,16 @@ class Trainer:
 			correct += preds.eq(y).sum().item()
 			total += y.size(0)
 
+			# Optional: print learning rate once per epoch start
+			if step == 0:
+				current_lr = self.optimizer.param_groups[0]['lr']
+				print(f"[DEBUG] Current learning rate: {current_lr:.6f}")
+
 		return total_loss / total, correct / total
 
+	# ------------------------------
+	# Evaluation
+	# ------------------------------
 	def evaluate(self):
 		self.model.eval()
 		total_loss, correct, total = 0, 0, 0
@@ -119,24 +148,29 @@ class Trainer:
 
 		return total_loss / total, correct / total
 
+	# ------------------------------
+	# Metric logging
+	# ------------------------------
 	def log_metrics(self, epoch, train_loss, train_acc, test_loss, test_acc):
 		p_l_values = self.preact_logger.compute_metric(self.test_loader)
-
 		with open(self.log_file, "a", newline="") as f:
 			writer = csv.writer(f)
 			row = [epoch, train_loss, train_acc, test_loss, test_acc]
 			row += p_l_values
 			writer.writerow(row)
 
+	# ------------------------------
+	# Training loop
+	# ------------------------------
 	def run(self):
 		for epoch in range(1, self.cfg.training.epochs + 1):
 			train_loss, train_acc = self.train_one_epoch()
 			test_loss, test_acc = self.evaluate()
 			self.log_metrics(epoch, train_loss, train_acc, test_loss, test_acc)
 
-			if epoch % 10 == 0:
+			if epoch % 10 == 0 or epoch == 1:
 				print(
 					f"[{epoch}/{self.cfg.training.epochs}] "
-					f"Train: loss={train_loss:.4f}, acc={train_acc:.4f} "
+					f"Train: loss={train_loss:.4f}, acc={train_acc:.4f} | "
 					f"Test: loss={test_loss:.4f}, acc={test_acc:.4f}"
 				)
