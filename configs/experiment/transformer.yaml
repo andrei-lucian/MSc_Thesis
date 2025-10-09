@@ -13,4 +13,4 @@ training:
   optimizer: adam
   lr: 0.0005
   warmup_steps: 4000
-  label_smoothing: 1
+  label_smoothing: 0.1
