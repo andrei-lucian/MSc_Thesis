@@ -121,11 +121,6 @@ class Trainer:
 			correct += preds.eq(y).sum().item()
 			total += y.size(0)
 
-			# Optional: print learning rate once per epoch start
-			if step == 0:
-				current_lr = self.optimizer.param_groups[0]['lr']
-				print(f"[DEBUG] Current learning rate: {current_lr:.6f}")
-
 		return total_loss / total, correct / total
 
 	# ------------------------------
