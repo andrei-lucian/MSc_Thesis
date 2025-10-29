@@ -1,20 +1,39 @@
+# =========================================================
+# === Hydra configuration (handles output directories) ===
+# =========================================================
 hydra:
   job:
-    chdir: true           # Hydra cd's into the run dir before calling main()
+    chdir: true  # Hydra will cd into the run dir before launching main()
   run:
+    # Single-run output directory
     dir: outputs/${experiment.name}/${now:%Y-%m-%d_%H-%M-%S}
   sweep:
+    # Base directory for multirun sweeps
     dir: multirun/${now:%Y-%m-%d_%H-%M-%S}
-    subdir: ${experiment.name}/${model.arch}_width${model.width}_seed${experiment.seed}
+    # Each combination of parameters gets a unique subdirectory
+    subdir: ${experiment.name}/${model.arch}_width${model.width}_seed${experiment.seed}_noise${dataset.label_noise}
 
-# Main entrypoint
+  # Optional Hydra launcher/sweeper configuration (default basic)
+  launcher:
+    _target_: hydra._internal.core_plugins.basic_launcher.BasicLauncher
+  sweeper:
+    _target_: hydra._internal.core_plugins.basic_sweeper.BasicSweeper
+    max_batch_size: null
+    params: null
+
+# =========================================================
+# === Default configuration hierarchy =====================
+# =========================================================
 defaults:
-  - model: resnet18
+  - model: resnet18        # default model (can override with model=basenet18)
   - dataset: cifar10
   - training: base
   - experiment: default
   - _self_
 
+# =========================================================
+# === Global experiment metadata ==========================
+# =========================================================
 experiment:
   name: default
   seed: 0
