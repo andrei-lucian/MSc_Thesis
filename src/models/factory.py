@@ -1,4 +1,4 @@
-from src.models.resnet_variants import resnet18_preact, resnet34_preact
+from src.models.resnet_variants import resnet18_preact, resnet34_preact, basenet18
 from src.models.cnn import simple_cnn
 from src.models.transformer import Seq2SeqTransformer
 
@@ -29,5 +29,7 @@ def get_model(cfg, *args):
 		return resnet34_preact(num_classes=num_classes, k=k)
 	elif arch == "simplecnn":
 		return simple_cnn(num_classes=num_classes, k=k)
+	elif arch == "basenet18":	
+		return basenet18(num_classes=num_classes, first_n_linear=getattr(cfg, "first_n_linear", 0))
 	else:
 		raise ValueError(f"Unknown architecture: {cfg.arch}")

@@ -1,0 +1,3 @@
+- experiment=transformer
+- experiment.seed=1
+- model.width=95

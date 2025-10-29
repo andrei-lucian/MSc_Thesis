@@ -1,0 +1,5 @@
+arch: basenet18
+width: 64
+pretrained: false
+first_n_linear: 0
+trainer: classification

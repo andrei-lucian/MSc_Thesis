@@ -4,3 +4,4 @@ num_classes: 10
 augment: standard
 batch_size: 128
 label_noise: 0.15
+num_workers: 4

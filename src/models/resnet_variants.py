@@ -1,8 +1,68 @@
+import torch
 import torch.nn as nn
 
-# -------------------------------
-# Pre-activation BasicBlock
-# -------------------------------
+# =========================================================
+# === BaseNet18 (no residuals, for nonlinearity analysis) ==
+# =========================================================
+class BasicBlock(nn.Module):
+    def __init__(self, in_channels, out_channels, stride=1, nonlinear=True):
+        super().__init__()
+        self.conv = nn.Conv2d(in_channels, out_channels, kernel_size=3,
+                              stride=stride, padding=1, bias=False)
+        self.bn = nn.BatchNorm2d(out_channels)
+        self.relu = nn.ReLU(inplace=True) if nonlinear else nn.Identity()
+
+    def forward(self, x):
+        x = self.bn(self.conv(x))   # preactivation = output of BN
+        x = self.relu(x)
+        return x
+
+
+class BaseNet18_CIFAR(nn.Module):
+    """
+    Simple CNN (BaseNet18) following Pinson et al. (2024) style.
+    No residual connections; used for studying effective nonlinearity.
+    """
+    def __init__(self, first_n_linear=0, num_classes=10):
+        super().__init__()
+        self.conv1 = nn.Conv2d(3, 64, kernel_size=3, stride=1, padding=1, bias=False)
+        self.bn1 = nn.BatchNorm2d(64)
+        self.relu = nn.ReLU(inplace=True)
+
+        # Config: 18 conv layers total (same as ResNet18, but no skips)
+        cfg = [(64, 1)] * 4 + [(128, 2)] + [(128, 1)] * 3 + \
+              [(256, 2)] + [(256, 1)] * 3 + [(512, 2)] + [(512, 1)] * 3
+
+        self.blocks = nn.ModuleList()
+        in_channels = 64
+        for i, (out_channels, stride) in enumerate(cfg):
+            nonlinear = (i >= first_n_linear)
+            self.blocks.append(BasicBlock(in_channels, out_channels, stride, nonlinear))
+            in_channels = out_channels
+
+        self.avgpool = nn.AdaptiveAvgPool2d((1, 1))
+        self.fc = nn.Linear(512, num_classes)
+
+        # Initialization
+        for m in self.modules():
+            if isinstance(m, (nn.Conv2d, nn.Linear)):
+                nn.init.kaiming_uniform_(m.weight, nonlinearity='relu')
+                if m.bias is not None:
+                    nn.init.zeros_(m.bias)
+
+    def forward(self, x):
+        x = self.relu(self.bn1(self.conv1(x)))
+        for block in self.blocks:
+            x = block(x)
+        x = self.avgpool(x)
+        x = torch.flatten(x, 1)
+        x = self.fc(x)
+        return x
+
+
+# =========================================================
+# === Pre-activation ResNet (with residuals) ==============
+# =========================================================
 class PreActBasicBlock(nn.Module):
     expansion = 1
 
@@ -18,7 +78,7 @@ class PreActBasicBlock(nn.Module):
         self.conv2 = nn.Conv2d(planes, planes, kernel_size=3,
                                stride=1, padding=1, bias=False)
 
-        # shortcut if shape mismatch
+        # Shortcut if shape changes
         self.shortcut = None
         if stride != 1 or in_planes != planes:
             self.shortcut = nn.Conv2d(in_planes, planes, kernel_size=1,
@@ -33,10 +93,10 @@ class PreActBasicBlock(nn.Module):
         return out
 
 
-# -------------------------------
-# Pre-activation ResNet (CIFAR style stem)
-# -------------------------------
 class PreActResNet(nn.Module):
+    """
+    CIFAR-style Pre-activation ResNet (He et al. 2016).
+    """
     def __init__(self, block, layers, k=64, num_classes=10):
         super().__init__()
         self.in_planes = k
@@ -56,8 +116,7 @@ class PreActResNet(nn.Module):
         self.fc = nn.Linear(8 * k * block.expansion, num_classes)
 
     def _make_layer(self, block, planes, blocks, stride):
-        layers = []
-        layers.append(block(self.in_planes, planes, stride))
+        layers = [block(self.in_planes, planes, stride)]
         self.in_planes = planes * block.expansion
         for _ in range(1, blocks):
             layers.append(block(self.in_planes, planes))
@@ -79,14 +138,17 @@ class PreActResNet(nn.Module):
         return x
 
 
-# -------------------------------
-# Factory functions
-# -------------------------------
+# =========================================================
+# === Factory functions ===================================
+# =========================================================
 def resnet18_preact(num_classes=10, k=64):
-    """Pre-activation ResNet-18 with CIFAR-style stem and [k, 2k, 4k, 8k] channels"""
+    """Pre-activation ResNet-18"""
     return PreActResNet(PreActBasicBlock, [2, 2, 2, 2], k=k, num_classes=num_classes)
 
-
 def resnet34_preact(num_classes=10, k=64):
-    """Pre-activation ResNet-34 with CIFAR-style stem and [k, 2k, 4k, 8k] channels"""
+    """Pre-activation ResNet-34"""
     return PreActResNet(PreActBasicBlock, [3, 4, 6, 3], k=k, num_classes=num_classes)
+
+def basenet18(num_classes=10, first_n_linear=0):
+    """Non-residual CNN (BaseNet18)"""
+    return BaseNet18_CIFAR(first_n_linear=first_n_linear, num_classes=num_classes)

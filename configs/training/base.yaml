@@ -1,7 +1,17 @@
-epochs: 100
-batch_size: 128
-optimizer: adam      #sgd or adam
-lr: 1e-4
-momentum: 0
-weight_decay: 5e-4
-lr_schedule: inverse_sqrt
+# --- Core training control ---
+use_steps: true          # use step-based training instead of epochs
+max_steps: 80000         # train for 80k optimizer steps
+log_interval: 1000       # log metrics every 1000 steps
+
+# --- Optimizer setup ---
+optimizer: sgd           # stochastic gradient descent
+lr: 0.005                 # standard starting LR for CIFAR10 + SGD
+momentum: 0.9            # required by your baseline
+weight_decay: 5e-4       # standard CIFAR regularization
+
+# --- Scheduler ---
+lr_schedule: cosine      # cosine annealing learning-rate schedule
+
+# --- Batch and epoch bookkeeping ---
+batch_size: 128          # typical CIFAR batch size
+epochs: 200              # optional; only used if use_steps: false
