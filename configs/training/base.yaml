@@ -1,6 +1,6 @@
 # --- Core training control ---
 use_steps: true          # use step-based training instead of epochs
-max_steps: 1000         # train for 80k optimizer steps
+max_steps: 80000         # train for 80k optimizer steps
 log_interval: 1000       # log metrics every 1000 steps
 
 # --- Optimizer setup ---
