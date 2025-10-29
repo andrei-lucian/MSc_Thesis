@@ -29,7 +29,7 @@ def get_model(cfg, *args):
 		return resnet34_preact(num_classes=num_classes, k=k)
 	elif arch == "simplecnn":
 		return simple_cnn(num_classes=num_classes, k=k)
-	elif arch == "basenet18":	
-		return basenet18(num_classes=num_classes, first_n_linear=getattr(cfg, "first_n_linear", 0))
+	elif arch == "basenet18":
+		return basenet18(num_classes=num_classes, first_n_linear=getattr(cfg, "first_n_linear", 0), k=k)
 	else:
 		raise ValueError(f"Unknown architecture: {cfg.arch}")
