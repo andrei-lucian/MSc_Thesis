@@ -4,3 +4,10 @@
 
 .venv/
 fairseq/
+
+# Ignore all .pyc files
+*.pyc
+__pycache__/
+
+/outputs/
+/multirun/

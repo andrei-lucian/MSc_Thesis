@@ -1,3 +1,0 @@
-arch,width,seed,noise,params
-basenet18,4,0,0,11000138
-step,train_loss,train_acc,test_loss,test_acc,p_layer0,p_layer1,p_layer2,p_layer3,p_layer4,p_layer5,p_layer6,p_layer7,p_layer8,p_layer9,p_layer10,p_layer11,p_layer12,p_layer13,p_layer14,p_layer15,p_layer16
