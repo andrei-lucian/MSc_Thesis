@@ -1,0 +1,4 @@
+- experiment=basenet
+- model.width=12
+- experiment.seed=2
+- dataset.label_noise=0

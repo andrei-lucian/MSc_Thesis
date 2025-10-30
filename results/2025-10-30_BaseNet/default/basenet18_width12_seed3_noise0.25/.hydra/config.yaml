@@ -1,0 +1,31 @@
+model:
+  arch: basenet18
+  width: 12
+  pretrained: false
+  first_n_linear: 0
+  trainer: classification
+dataset:
+  name: CIFAR10
+  root: ./data
+  num_classes: 10
+  augment: standard
+  batch_size: 128
+  label_noise: 0.25
+  num_workers: 4
+training:
+  use_steps: true
+  max_steps: 80000
+  log_interval: 1000
+  optimizer: sgd
+  lr: 0.005
+  momentum: 0.9
+  weight_decay: 0.0005
+  lr_schedule: cosine
+  batch_size: 128
+  epochs: 200
+name: cnn
+seed: 0
+experiment:
+  name: default
+  seed: 3
+  output_dir: outputs/${experiment.name}
