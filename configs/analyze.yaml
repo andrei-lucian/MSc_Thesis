@@ -1,0 +1,14 @@
+experiment:
+  name: linearization_sweep
+  checkpoint_dir: "outputs/default/2025-11-05_13-48-25/checkpoints"  # adjust
+  thresholds: [0.05, 0.1, 0.15]
+
+# model:
+#   arch: basenet18
+#   width: 64
+
+defaults:
+  - dataset: cifar10           # pull in everything from configs/dataset/cifar10.yaml
+  - model: basenet18
+  - override hydra/job_logging: none
+  - _self_

@@ -158,6 +158,30 @@ class Trainer:
             row = [index, train_loss, train_acc, test_loss, test_acc]
             row += p_l_values
             writer.writerow(row)
+            
+    # ------------------------------
+    # Checkpoint saving
+    # ------------------------------
+    def save_checkpoint(self, step_or_epoch):
+        """
+        Save model, optimizer, and scheduler state for later analysis or resume.
+        """
+        ckpt_dir = self.out_dir / "checkpoints"
+        ckpt_dir.mkdir(exist_ok=True)
+
+        # choose file name based on whether training is step-based or epoch-based
+        mode = "step" if getattr(self.cfg.training, "use_steps", False) else "epoch"
+        ckpt_path = ckpt_dir / f"{mode}_{step_or_epoch:06d}.pt"
+
+        torch.save({
+            "index": step_or_epoch,
+            "model_state": self.model.state_dict(),
+            "optimizer_state": self.optimizer.state_dict(),
+            "scheduler_state": self.scheduler.state_dict() if self.scheduler else None,
+            "cfg": self.cfg,
+        }, ckpt_path)
+
+        print(f"[Checkpoint] Saved model at {ckpt_path}")
 
     # ------------------------------
     # Training loop (supports epochs or steps)
@@ -173,6 +197,9 @@ class Trainer:
         use_steps = getattr(self.cfg.training, "use_steps", False)
         max_steps = getattr(self.cfg.training, "max_steps", None)
         log_interval = getattr(self.cfg.training, "log_interval", 1000)
+        save_interval = getattr(self.cfg.logging, "save_interval", 1000)  # NEW
+        ckpt_dir = self.out_dir / "checkpoints"
+        ckpt_dir.mkdir(exist_ok=True)
 
         if not use_steps:
             # ========================================================
@@ -183,12 +210,19 @@ class Trainer:
                 test_loss, test_acc = self.evaluate()
                 self.log_metrics(epoch, train_loss, train_acc, test_loss, test_acc, "epoch")
 
+                # --- Save checkpoint every N epochs ---
+                if epoch % save_interval == 0 or epoch == 1:
+                    ckpt_path = ckpt_dir / f"epoch_{epoch:06d}.pt"
+                    torch.save(self.model.state_dict(), ckpt_path)
+                    print(f"[Checkpoint] Saved model → {ckpt_path}")
+
                 if epoch % 10 == 0 or epoch == 1:
                     print(
                         f"[Epoch {epoch}/{self.cfg.training.epochs}] "
                         f"Train: loss={train_loss:.4f}, acc={train_acc:.4f} | "
                         f"Test: loss={test_loss:.4f}, acc={test_acc:.4f}"
                     )
+
         else:
             # ========================================================
             # === STEP-BASED training (Transformer-style)
@@ -229,3 +263,10 @@ class Trainer:
                             f"Train: loss={train_loss:.4f}, acc={train_acc:.4f} | "
                             f"Test: loss={test_loss:.4f}, acc={test_acc:.4f}"
                         )
+
+                    # --- Save checkpoint every N steps ---
+                    if step % save_interval == 0 or step == 1:
+                        ckpt_path = ckpt_dir / f"step_{step:06d}.pt"
+                        torch.save(self.model.state_dict(), ckpt_path)
+                        print(f"[Checkpoint] Saved model → {ckpt_path}")
+

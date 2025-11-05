@@ -31,6 +31,9 @@ defaults:
   - experiment: default
   - _self_
 
+logging:
+  save_interval: 1000   # save every 1000 steps (or every 10 epochs for epoch-based)
+
 # =========================================================
 # === Global experiment metadata ==========================
 # =========================================================
