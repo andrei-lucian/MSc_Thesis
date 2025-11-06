@@ -166,7 +166,58 @@ class PreActResNet(nn.Module):
         x = torch.flatten(x, 1)
         x = self.fc(x)
         return x
+    
 
+class BaseNet18ConstantWidth_CIFAR(nn.Module):
+    """
+    Constant-width variant of BaseNet18 (no residuals, no channel doubling).
+    - Keeps all conv layers at the same width `k`.
+    - Maintains stride pattern of standard BaseNet18 for spatial downsampling.
+    """
+    def __init__(self, first_n_linear=0, num_classes=10, k=64):
+        super().__init__()
+        self.k = k
+
+        # Stem
+        self.conv1 = nn.Conv2d(3, k, kernel_size=3, stride=1, padding=1, bias=False)
+        self.bn1 = nn.BatchNorm2d(k)
+        self.relu = nn.ReLU(inplace=True)
+
+        # Configuration: same stride pattern as ResNet18, but constant width
+        cfg = (
+            [(k, 1)] * 4 +
+            [(k, 2)] + [(k, 1)] * 3 +
+            [(k, 2)] + [(k, 1)] * 3 +
+            [(k, 2)] + [(k, 1)] * 3
+        )
+
+        # Build convolutional blocks
+        self.blocks = nn.ModuleList()
+        in_channels = k
+        for i, (out_channels, stride) in enumerate(cfg):
+            nonlinear = (i >= first_n_linear)
+            self.blocks.append(BasicBlock(in_channels, out_channels, stride, nonlinear))
+            in_channels = out_channels  # stays constant (always k)
+
+        # Classifier
+        self.avgpool = nn.AdaptiveAvgPool2d((1, 1))
+        self.fc = nn.Linear(k, num_classes)
+
+        # Weight initialization
+        for m in self.modules():
+            if isinstance(m, (nn.Conv2d, nn.Linear)):
+                nn.init.kaiming_uniform_(m.weight, nonlinearity='relu')
+                if m.bias is not None:
+                    nn.init.zeros_(m.bias)
+
+    def forward(self, x):
+        x = self.relu(self.bn1(self.conv1(x)))
+        for block in self.blocks:
+            x = block(x)
+        x = self.avgpool(x)
+        x = torch.flatten(x, 1)
+        x = self.fc(x)
+        return x
 
 # =========================================================
 # === Factory functions ===================================
@@ -184,3 +235,8 @@ def resnet18_preact(num_classes=10, k=64):
 def resnet34_preact(num_classes=10, k=64):
     """Pre-activation ResNet-34"""
     return PreActResNet(PreActBasicBlock, [3, 4, 6, 3], k=k, num_classes=num_classes)
+
+def basenet18_constant(num_classes=10, first_n_linear=0, k=64):
+    """Constant-width BaseNet18 (no residuals, all conv layers have same width `k`)."""
+    return BaseNet18ConstantWidth_CIFAR(first_n_linear=first_n_linear, num_classes=num_classes, k=k)
+

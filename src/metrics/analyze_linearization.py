@@ -10,7 +10,6 @@ from src.data.factory import get_dataset
 from src.models.factory import get_model
 from src.metrics.preactivation import PreactivationLogger
 
-
 def build_model_from_cfg_and_extra(cfg, extra):
     """
     Mirrors your main(): if extra is (src_vocab, tgt_vocab) -> seq2seq,
@@ -134,8 +133,57 @@ def linearize_and_evaluate(cfg, checkpoint_dir, thresholds=[0.0, 0.1, 0.2]):
 
 @hydra.main(config_path='../../configs', config_name="analyze", version_base=None)
 def main(cfg: DictConfig):
-	# Run linearization sweep
-	linearize_and_evaluate(cfg, cfg.experiment.checkpoint_dir, cfg.experiment.thresholds)
+    """
+    Finds all experiment subfolders under cfg.experiment.checkpoint_dir,
+    parses their width/seed/noise from folder names,
+    and runs linearization for each one (skips if results already exist).
+    """
+    base_dir = Path(cfg.experiment.checkpoint_dir)
+    subdirs = [p for p in base_dir.iterdir() if p.is_dir()]
+
+    print(f"[Analysis] Searching for experiments in {base_dir}")
+    print(f"Found {len(subdirs)} experiment folders")
+
+    for sub in subdirs:
+        ckpt_dir = sub / "checkpoints"
+        results_csv = sub / "linearization_results.csv"
+
+        # --- skip logic ---
+        if results_csv.exists():
+            print(f"[Skip] {sub.name} — results file already exists at {results_csv}")
+            continue
+
+        if not ckpt_dir.exists():
+            print(f"[Skip] {sub.name} — no checkpoints folder found.")
+            continue
+
+        # Parse experiment parameters from folder name
+        # Example: basenet18_width12_seed0_noise0
+        name = sub.name
+        try:
+            width = int(name.split("width")[1].split("_")[0])
+        except Exception:
+            width = getattr(cfg.model, "width", 64)
+
+        try:
+            seed = int(name.split("seed")[1].split("_")[0])
+        except Exception:
+            seed = getattr(cfg.experiment, "seed", 0)
+
+        try:
+            noise = float(name.split("noise")[1])
+        except Exception:
+            noise = getattr(cfg.dataset, "label_noise", 0.0)
+
+        # Update cfg fields dynamically
+        cfg.model.width = width
+        cfg.dataset.label_noise = noise
+
+        print(f"\n[=== Running linearization for {sub.name} ===]")
+        print(f"→ width={width}, seed={seed}, noise={noise}")
+
+        # Run the analysis for this model
+        linearize_and_evaluate(cfg, ckpt_dir, cfg.experiment.thresholds)
 
 if __name__ == "__main__":
 	main()

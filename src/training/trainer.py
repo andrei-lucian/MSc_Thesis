@@ -197,7 +197,8 @@ class Trainer:
         use_steps = getattr(self.cfg.training, "use_steps", False)
         max_steps = getattr(self.cfg.training, "max_steps", None)
         log_interval = getattr(self.cfg.training, "log_interval", 1000)
-        save_interval = getattr(self.cfg.logging, "save_interval", 1000)  # NEW
+        save_interval = getattr(self.cfg.training, "save_interval", 1000)
+        save_checkpoints = getattr(self.cfg.training, "save_checkpoints", True)
         ckpt_dir = self.out_dir / "checkpoints"
         ckpt_dir.mkdir(exist_ok=True)
 
@@ -211,7 +212,7 @@ class Trainer:
                 self.log_metrics(epoch, train_loss, train_acc, test_loss, test_acc, "epoch")
 
                 # --- Save checkpoint every N epochs ---
-                if epoch % save_interval == 0 or epoch == 1:
+                if save_checkpoints and (step % save_interval == 0 or step == 1):
                     ckpt_path = ckpt_dir / f"epoch_{epoch:06d}.pt"
                     torch.save(self.model.state_dict(), ckpt_path)
                     print(f"[Checkpoint] Saved model → {ckpt_path}")
@@ -265,7 +266,7 @@ class Trainer:
                         )
 
                     # --- Save checkpoint every N steps ---
-                    if step % save_interval == 0 or step == 1:
+                    if save_checkpoints and (step % save_interval == 0 or step == 1):
                         ckpt_path = ckpt_dir / f"step_{step:06d}.pt"
                         torch.save(self.model.state_dict(), ckpt_path)
                         print(f"[Checkpoint] Saved model → {ckpt_path}")
