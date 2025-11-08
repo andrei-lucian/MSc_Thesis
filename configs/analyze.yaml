@@ -1,6 +1,6 @@
 experiment:
   name: linearization_sweep
-  checkpoint_dir: "results/BaseNet_w_checkpoints/2025-11-05_16-06-40/default"  # adjust
+  checkpoint_dir: "results/BaseNet_w_checkpoints/2025-11-05_17-12-38/default"  # adjust
   thresholds: [0.01, 0.0125, 0.015, 0.025, 0.03, 0.035, 0.055]
   
 # model:
