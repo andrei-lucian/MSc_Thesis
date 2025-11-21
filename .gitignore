@@ -11,4 +11,7 @@ __pycache__/
 
 /outputs/
 /multirun/
+/results/
+# Ignore all png files
+*.png
 **/checkpoints/

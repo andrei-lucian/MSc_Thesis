@@ -95,7 +95,9 @@ class Trainer:
             # Dynamic header
             index_name = "step" if getattr(cfg.training, "use_steps", False) else "epoch"
             header = [index_name, "train_loss", "train_acc", "test_loss", "test_acc"]
-            header += [f"p_layer{i}" for i in range(len(self.preact_logger.layers))]
+            num_layers = len(self.preact_logger.layers)
+            header += [f"p_layer{i}" for i in range(num_layers)]
+            header += [f"fa_layer{i}" for i in range(num_layers)]
             writer.writerow(header)
 
     # ------------------------------
@@ -152,11 +154,12 @@ class Trainer:
         Logs performance and preactivation metrics.
         index_name: "epoch" or "step"
         """
-        p_l_values = self.preact_logger.compute_metric(self.test_loader)
+        mean_vals, frac_vals = self.preact_logger.compute_both(self.test_loader)
         with open(self.log_file, "a", newline="") as f:
             writer = csv.writer(f)
             row = [index, train_loss, train_acc, test_loss, test_acc]
-            row += p_l_values
+            row += mean_vals
+            row += frac_vals
             writer.writerow(row)
             
     # ------------------------------
@@ -212,7 +215,7 @@ class Trainer:
                 self.log_metrics(epoch, train_loss, train_acc, test_loss, test_acc, "epoch")
 
                 # --- Save checkpoint every N epochs ---
-                if save_checkpoints and (step % save_interval == 0 or step == 1):
+                if save_checkpoints and (step % save_interval == 0 or epoch == 1):
                     ckpt_path = ckpt_dir / f"epoch_{epoch:06d}.pt"
                     torch.save(self.model.state_dict(), ckpt_path)
                     print(f"[Checkpoint] Saved model → {ckpt_path}")
