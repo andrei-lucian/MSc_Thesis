@@ -3,7 +3,7 @@ use_steps: true          # use step-based training instead of epochs
 max_steps: 40000         # train for 80k optimizer steps
 log_interval: 1000       # log metrics every 1000 steps
 save_interval: 1000      # save every 1000 steps (or every 10 epochs for epoch-based)
-save_checkpoints: true   # turn checkpoint saving on or off
+save_checkpoints: false   # turn checkpoint saving on or off
 
 # --- Optimizer setup ---
 optimizer: sgd           # stochastic gradient descent
