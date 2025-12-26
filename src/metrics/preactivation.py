@@ -141,7 +141,6 @@ class PreactivationLogger:
 		return out
 
 	# -------------------------------------------------------------
-	# NEW METHOD
 	# Returns fraction-active values in same order & shape
 	# -------------------------------------------------------------
 	def compute_fraction_active(self):

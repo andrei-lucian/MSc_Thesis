@@ -24,21 +24,16 @@ class BasicBlock(nn.Module):
 class BaseNet18_CIFAR(nn.Module):
     """
     Scalable BaseNet18 (no residuals), following Pinson et al. (2024).
-    - No skip connections (unlike ResNet).
-    - Uses width multiplier `k` to scale all channel sizes.
-    - CIFAR-style (no initial maxpool).
     """
     def __init__(self, first_n_linear=0, num_classes=10, k=64):
         super().__init__()
         self.k = k
 
-        # Stem: first conv layer
+        # Stem: first conv layer (Layer index 0)
         self.conv1 = nn.Conv2d(3, k, kernel_size=3, stride=1, padding=1, bias=False)
         self.bn1 = nn.BatchNorm2d(k)
-        self.relu = nn.ReLU(inplace=True)
+        self.relu = nn.Identity() if first_n_linear > 0 else nn.ReLU(inplace=True)
 
-        # Configuration for 18 conv layers total (ResNet18 pattern, no skips)
-        # Each tuple: (output_channels, stride)
         cfg = (
             [(k, 1)] * 4 +
             [(2 * k, 2)] + [(2 * k, 1)] * 3 +
@@ -46,19 +41,17 @@ class BaseNet18_CIFAR(nn.Module):
             [(8 * k, 2)] + [(8 * k, 1)] * 3
         )
 
-        # Build convolutional blocks
         self.blocks = nn.ModuleList()
         in_channels = k
         for i, (out_channels, stride) in enumerate(cfg):
-            nonlinear = (i >= first_n_linear)
+            # i+1 because stem is layer 0
+            nonlinear = ((i + 1) >= first_n_linear)
             self.blocks.append(BasicBlock(in_channels, out_channels, stride, nonlinear))
             in_channels = out_channels
 
-        # Classifier
         self.avgpool = nn.AdaptiveAvgPool2d((1, 1))
         self.fc = nn.Linear(8 * k, num_classes)
 
-        # Weight initialization
         for m in self.modules():
             if isinstance(m, (nn.Conv2d, nn.Linear)):
                 nn.init.kaiming_uniform_(m.weight, nonlinearity='relu')
@@ -78,27 +71,27 @@ class BaseNet18_CIFAR(nn.Module):
 # =========================================================
 # === Pre-activation ResNet (with residuals) ==============
 # =========================================================
+
 class PreActBasicBlock(nn.Module):
-    """Pre-activation residual block (He et al., 2016)."""
+    """Pre-activation residual block with optional linearity for each activation."""
     expansion = 1
 
-    def __init__(self, in_planes, planes, stride=1):
+    def __init__(self, in_planes, planes, stride=1, lin1=False, lin2=False):
         super().__init__()
         self.bn1 = nn.BatchNorm2d(in_planes)
-        self.relu1 = nn.ReLU(inplace=True)
+        self.relu1 = nn.Identity() if lin1 else nn.ReLU(inplace=True)
         self.conv1 = nn.Conv2d(
             in_planes, planes, kernel_size=3,
             stride=stride, padding=1, bias=False
         )
 
         self.bn2 = nn.BatchNorm2d(planes)
-        self.relu2 = nn.ReLU(inplace=True)
+        self.relu2 = nn.Identity() if lin2 else nn.ReLU(inplace=True)
         self.conv2 = nn.Conv2d(
             planes, planes, kernel_size=3,
             stride=1, padding=1, bias=False
         )
 
-        # Shortcut for downsampling or channel matching
         self.shortcut = None
         if stride != 1 or in_planes != planes:
             self.shortcut = nn.Conv2d(
@@ -107,29 +100,32 @@ class PreActBasicBlock(nn.Module):
             )
 
     def forward(self, x):
-        out = self.relu1(self.bn1(x))  # preactivation before conv1
+        # In Pre-activation, BN/ReLU happens BEFORE the convolution
+        out = self.relu1(self.bn1(x))
         shortcut = self.shortcut(out) if self.shortcut is not None else x
         out = self.conv1(out)
-        out = self.conv2(self.relu2(self.bn2(out)))  # preactivation before conv2
+        out = self.conv2(self.relu2(self.bn2(out)))
         out += shortcut
         return out
 
 
 class PreActResNet(nn.Module):
     """
-    CIFAR-style Pre-activation ResNet (He et al. 2016).
-    - Uses width multiplier `k` to scale model capacity.
+    CIFAR-style Pre-activation ResNet with configurable linear layers.
     """
-    def __init__(self, block, layers, k=64, num_classes=10):
+    def __init__(self, block, layers, k=64, num_classes=10, first_n_linear=0):
         super().__init__()
         self.in_planes = k
+        self.first_n_linear = first_n_linear
+        self.current_layer_idx = 0 
 
-        # Stem
+        # Stem (Layer 0)
         self.conv1 = nn.Conv2d(3, k, kernel_size=3, stride=1, padding=1, bias=False)
         self.bn1 = nn.BatchNorm2d(k)
-        self.relu = nn.ReLU(inplace=True)
+        self.relu = nn.Identity() if self.current_layer_idx < first_n_linear else nn.ReLU(inplace=True)
+        self.current_layer_idx += 1
 
-        # Four stages with [k, 2k, 4k, 8k] channels
+        # Four stages
         self.layer1 = self._make_layer(block, k, layers[0], stride=1)
         self.layer2 = self._make_layer(block, 2 * k, layers[1], stride=2)
         self.layer3 = self._make_layer(block, 4 * k, layers[2], stride=2)
@@ -145,23 +141,26 @@ class PreActResNet(nn.Module):
                 if m.bias is not None:
                     nn.init.zeros_(m.bias)
 
-    def _make_layer(self, block, planes, blocks, stride):
-        layers = [block(self.in_planes, planes, stride)]
-        self.in_planes = planes * block.expansion
-        for _ in range(1, blocks):
-            layers.append(block(self.in_planes, planes))
+    def _make_layer(self, block, planes, num_blocks, stride):
+        strides = [stride] + [1] * (num_blocks - 1)
+        layers = []
+        for s in strides:
+            # Check linearity for the two conv-activations inside the block
+            lin1 = self.current_layer_idx < self.first_n_linear
+            self.current_layer_idx += 1
+            lin2 = self.current_layer_idx < self.first_n_linear
+            self.current_layer_idx += 1
+            
+            layers.append(block(self.in_planes, planes, s, lin1, lin2))
+            self.in_planes = planes * block.expansion
         return nn.Sequential(*layers)
 
     def forward(self, x):
-        x = self.conv1(x)
-        x = self.bn1(x)
-        x = self.relu(x)
-
+        x = self.relu(self.bn1(self.conv1(x)))
         x = self.layer1(x)
         x = self.layer2(x)
         x = self.layer3(x)
         x = self.layer4(x)
-
         x = self.avgpool(x)
         x = torch.flatten(x, 1)
         x = self.fc(x)
@@ -170,9 +169,7 @@ class PreActResNet(nn.Module):
 
 class BaseNet18ConstantWidth_CIFAR(nn.Module):
     """
-    Constant-width variant of BaseNet18 (no residuals, no channel doubling).
-    - Keeps all conv layers at the same width `k`.
-    - Maintains stride pattern of standard BaseNet18 for spatial downsampling.
+    Constant-width variant of BaseNet18.
     """
     def __init__(self, first_n_linear=0, num_classes=10, k=64):
         super().__init__()
@@ -181,9 +178,8 @@ class BaseNet18ConstantWidth_CIFAR(nn.Module):
         # Stem
         self.conv1 = nn.Conv2d(3, k, kernel_size=3, stride=1, padding=1, bias=False)
         self.bn1 = nn.BatchNorm2d(k)
-        self.relu = nn.ReLU(inplace=True)
+        self.relu = nn.Identity() if first_n_linear > 0 else nn.ReLU(inplace=True)
 
-        # Configuration: same stride pattern as ResNet18, but constant width
         cfg = (
             [(k, 1)] * 4 +
             [(k, 2)] + [(k, 1)] * 3 +
@@ -191,19 +187,16 @@ class BaseNet18ConstantWidth_CIFAR(nn.Module):
             [(k, 2)] + [(k, 1)] * 3
         )
 
-        # Build convolutional blocks
         self.blocks = nn.ModuleList()
         in_channels = k
         for i, (out_channels, stride) in enumerate(cfg):
-            nonlinear = (i >= first_n_linear)
+            nonlinear = ((i + 1) >= first_n_linear)
             self.blocks.append(BasicBlock(in_channels, out_channels, stride, nonlinear))
-            in_channels = out_channels  # stays constant (always k)
+            in_channels = out_channels
 
-        # Classifier
         self.avgpool = nn.AdaptiveAvgPool2d((1, 1))
         self.fc = nn.Linear(k, num_classes)
 
-        # Weight initialization
         for m in self.modules():
             if isinstance(m, (nn.Conv2d, nn.Linear)):
                 nn.init.kaiming_uniform_(m.weight, nonlinearity='relu')
@@ -223,20 +216,17 @@ class BaseNet18ConstantWidth_CIFAR(nn.Module):
 # === Factory functions ===================================
 # =========================================================
 def basenet18(num_classes=10, first_n_linear=0, k=64):
-    """Non-residual CNN (BaseNet18) with width scaling factor `k`."""
     return BaseNet18_CIFAR(first_n_linear=first_n_linear, num_classes=num_classes, k=k)
 
 
-def resnet18_preact(num_classes=10, k=64):
+def resnet18_preact(num_classes=10, k=64, first_n_linear=0):
     """Pre-activation ResNet-18"""
-    return PreActResNet(PreActBasicBlock, [2, 2, 2, 2], k=k, num_classes=num_classes)
+    return PreActResNet(PreActBasicBlock, [2, 2, 2, 2], k=k, num_classes=num_classes, first_n_linear=first_n_linear)
 
 
-def resnet34_preact(num_classes=10, k=64):
+def resnet34_preact(num_classes=10, k=64, first_n_linear=0):
     """Pre-activation ResNet-34"""
-    return PreActResNet(PreActBasicBlock, [3, 4, 6, 3], k=k, num_classes=num_classes)
+    return PreActResNet(PreActBasicBlock, [3, 4, 6, 3], k=k, num_classes=num_classes, first_n_linear=first_n_linear)
 
 def basenet18_constant(num_classes=10, first_n_linear=0, k=64):
-    """Constant-width BaseNet18 (no residuals, all conv layers have same width `k`)."""
     return BaseNet18ConstantWidth_CIFAR(first_n_linear=first_n_linear, num_classes=num_classes, k=k)
-
