@@ -7,7 +7,6 @@ def get_model(cfg, *args):
 
     if arch == "transformer":
         src_vocab_size, tgt_vocab_size = args
-        from src.models.transformer import Seq2SeqTransformer
         return Seq2SeqTransformer(
             src_vocab_size=src_vocab_size,
             tgt_vocab_size=tgt_vocab_size,

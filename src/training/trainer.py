@@ -32,7 +32,6 @@ class Trainer:
             self.scheduler = None
 
         elif cfg.training.optimizer == "adam":
-            # Use Transformer paper settings if inverse_sqrt schedule
             if cfg.training.lr_schedule == "inverse_sqrt":
                 self.optimizer = optim.Adam(
                     self.model.parameters(),
@@ -74,7 +73,13 @@ class Trainer:
         # ------------------------------
         # Output + logging setup
         # ------------------------------
-        self.out_dir = Path(os.getcwd())
+        
+        # --- Append 'linear_n' subfolder to prevent multirun overwrite ---
+        num_linear = getattr(cfg.model, "first_n_linear", 0)
+        if num_linear != 0:
+            self.out_dir = Path(os.getcwd()) / f"linear_{num_linear}"
+        else:
+            self.out_dir = Path(os.getcwd())
         self.out_dir.mkdir(parents=True, exist_ok=True)
 
         self.num_params = sum(p.numel() for p in self.model.parameters())
@@ -93,11 +98,14 @@ class Trainer:
             ])
 
             # Dynamic header
+            # --- REVERTED NAMING: Uses generic indices p_layer0, p_layer1 ---
             index_name = "step" if getattr(cfg.training, "use_steps", False) else "epoch"
             header = [index_name, "train_loss", "train_acc", "test_loss", "test_acc"]
+            
             num_layers = len(self.preact_logger.layers)
             header += [f"p_layer{i}" for i in range(num_layers)]
             header += [f"fa_layer{i}" for i in range(num_layers)]
+            
             writer.writerow(header)
 
     # ------------------------------
@@ -192,16 +200,14 @@ class Trainer:
     def run(self):
         """
         Runs training. Supports both epoch-based and step-based control.
-
-        cfg.training.use_steps: bool
-        cfg.training.max_steps: int (if use_steps=True)
-        cfg.training.log_interval: int (step logging frequency)
         """
         use_steps = getattr(self.cfg.training, "use_steps", False)
         max_steps = getattr(self.cfg.training, "max_steps", None)
         log_interval = getattr(self.cfg.training, "log_interval", 1000)
         save_interval = getattr(self.cfg.training, "save_interval", 1000)
         save_checkpoints = getattr(self.cfg.training, "save_checkpoints", True)
+        
+        # Ensure checkpoints go into the specific subfolder
         ckpt_dir = self.out_dir / "checkpoints"
         ckpt_dir.mkdir(exist_ok=True)
 
@@ -215,10 +221,8 @@ class Trainer:
                 self.log_metrics(epoch, train_loss, train_acc, test_loss, test_acc, "epoch")
 
                 # --- Save checkpoint every N epochs ---
-                if save_checkpoints and (step % save_interval == 0 or epoch == 1):
-                    ckpt_path = ckpt_dir / f"epoch_{epoch:06d}.pt"
-                    torch.save(self.model.state_dict(), ckpt_path)
-                    print(f"[Checkpoint] Saved model → {ckpt_path}")
+                if save_checkpoints and (epoch % save_interval == 0 or epoch == 1):
+                    self.save_checkpoint(epoch)
 
                 if epoch % 10 == 0 or epoch == 1:
                     print(
@@ -270,7 +274,4 @@ class Trainer:
 
                     # --- Save checkpoint every N steps ---
                     if save_checkpoints and (step % save_interval == 0 or step == 1):
-                        ckpt_path = ckpt_dir / f"step_{step:06d}.pt"
-                        torch.save(self.model.state_dict(), ckpt_path)
-                        print(f"[Checkpoint] Saved model → {ckpt_path}")
-
+                        self.save_checkpoint(step)
