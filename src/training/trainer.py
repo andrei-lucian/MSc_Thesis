@@ -98,13 +98,14 @@ class Trainer:
             ])
 
             # Dynamic header
-            # --- REVERTED NAMING: Uses generic indices p_layer0, p_layer1 ---
             index_name = "step" if getattr(cfg.training, "use_steps", False) else "epoch"
             header = [index_name, "train_loss", "train_acc", "test_loss", "test_acc"]
             
+            # --- FIX: Updated Headers for 3 Metrics ---
             num_layers = len(self.preact_logger.layers)
-            header += [f"p_layer{i}" for i in range(num_layers)]
-            header += [f"fa_layer{i}" for i in range(num_layers)]
+            header += [f"mean_layer{i}" for i in range(num_layers)]
+            header += [f"median_layer{i}" for i in range(num_layers)]
+            header += [f"cossim_layer{i}" for i in range(num_layers)]
             
             writer.writerow(header)
 
@@ -162,12 +163,18 @@ class Trainer:
         Logs performance and preactivation metrics.
         index_name: "epoch" or "step"
         """
-        mean_vals, frac_vals = self.preact_logger.compute_both(self.test_loader)
+        # --- FIX: Unpack 3 return values instead of 2 ---
+        means, medians, cossims = self.preact_logger.compute_all(self.test_loader)
+        
         with open(self.log_file, "a", newline="") as f:
             writer = csv.writer(f)
             row = [index, train_loss, train_acc, test_loss, test_acc]
-            row += mean_vals
-            row += frac_vals
+            
+            # Append all 3 metric lists
+            row += means
+            row += medians
+            row += cossims
+            
             writer.writerow(row)
             
     # ------------------------------
@@ -263,8 +270,12 @@ class Trainer:
                     if step % log_interval == 0 or step == 1:
                         train_loss = loss.item()
                         train_acc = (out.argmax(1) == y).float().mean().item()
+                        
                         test_loss, test_acc = self.evaluate()
+                        
+                        # CRITICAL FIX: Ensure model returns to train mode
                         self.model.train()
+                        
                         self.log_metrics(step, train_loss, train_acc, test_loss, test_acc, "step")
 
                         print(
