@@ -264,6 +264,7 @@ class Trainer:
                         train_loss = loss.item()
                         train_acc = (out.argmax(1) == y).float().mean().item()
                         test_loss, test_acc = self.evaluate()
+                        self.model.train()
                         self.log_metrics(step, train_loss, train_acc, test_loss, test_acc, "step")
 
                         print(

@@ -14,7 +14,7 @@ eos_idx: 2
 
 # Batching
 batch_size: 64
-num_workers: 4
+num_workers: 1
 max_len: 200   # optional safeguard to truncate very long sentences
 
 subset_fraction: 1

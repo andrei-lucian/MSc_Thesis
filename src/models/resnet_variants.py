@@ -1,11 +1,12 @@
 import torch
 import torch.nn as nn
+import torch.nn.init as init
 
 # =========================================================
 # === BaseNet18 (no residuals, for nonlinearity analysis) ==
 # =========================================================
 class BasicBlock(nn.Module):
-    """Single convolutional block: Conv → BN → (ReLU or Identity)"""
+    """Single convolutional block: Conv -> BN -> (ReLU or Identity)"""
     def __init__(self, in_channels, out_channels, stride=1, nonlinear=True):
         super().__init__()
         self.conv = nn.Conv2d(
@@ -23,7 +24,8 @@ class BasicBlock(nn.Module):
 
 class BaseNet18_CIFAR(nn.Module):
     """
-    Scalable BaseNet18 (no residuals), following Pinson et al. (2024).
+    Scalable BaseNet18 (no residuals).
+    Corrected initialization to prevent explosion in deep linear networks.
     """
     def __init__(self, first_n_linear=0, num_classes=10, k=64):
         super().__init__()
@@ -52,11 +54,48 @@ class BaseNet18_CIFAR(nn.Module):
         self.avgpool = nn.AdaptiveAvgPool2d((1, 1))
         self.fc = nn.Linear(8 * k, num_classes)
 
-        for m in self.modules():
-            if isinstance(m, (nn.Conv2d, nn.Linear)):
-                nn.init.kaiming_uniform_(m.weight, nonlinearity='relu')
-                if m.bias is not None:
-                    nn.init.zeros_(m.bias)
+        # ----------------------------------------------------------------------
+        # CORRECTED INITIALIZATION LOGIC
+        # ----------------------------------------------------------------------
+        
+        # 1. Init Stem
+        # Input is Image (Linear-ish). Use Xavier to be safe/neutral.
+        init.xavier_uniform_(self.conv1.weight)
+        if self.bn1.weight is not None:
+            init.constant_(self.bn1.weight, 1)
+            init.constant_(self.bn1.bias, 0)
+        
+        # Track signal state: True if previous output was Linear (Identity), False if ReLU
+        is_prev_linear = (first_n_linear > 0)
+
+        # 2. Init Blocks
+        for block in self.blocks:
+            # Init Conv based on INPUT signal nature
+            if is_prev_linear:
+                init.xavier_uniform_(block.conv.weight)
+            else:
+                init.kaiming_uniform_(block.conv.weight, nonlinearity='relu')
+            
+            # Init BN
+            if block.bn.weight is not None:
+                init.constant_(block.bn.weight, 1)
+                init.constant_(block.bn.bias, 0)
+
+            # Update state for the NEXT block based on THIS block's output
+            # If this block's activation is Identity, next block sees linear input.
+            if isinstance(block.relu, nn.Identity):
+                is_prev_linear = True
+            else:
+                is_prev_linear = False
+
+        # 3. Init Classifier
+        if is_prev_linear:
+            init.xavier_uniform_(self.fc.weight)
+        else:
+            init.kaiming_uniform_(self.fc.weight, nonlinearity='relu')
+        
+        if self.fc.bias is not None:
+            init.zeros_(self.fc.bias)
 
     def forward(self, x):
         x = self.relu(self.bn1(self.conv1(x)))
@@ -67,105 +106,6 @@ class BaseNet18_CIFAR(nn.Module):
         x = self.fc(x)
         return x
 
-
-# =========================================================
-# === Pre-activation ResNet (with residuals) ==============
-# =========================================================
-
-class PreActBasicBlock(nn.Module):
-    """Pre-activation residual block with optional linearity for each activation."""
-    expansion = 1
-
-    def __init__(self, in_planes, planes, stride=1, lin1=False, lin2=False):
-        super().__init__()
-        self.bn1 = nn.BatchNorm2d(in_planes)
-        self.relu1 = nn.Identity() if lin1 else nn.ReLU(inplace=True)
-        self.conv1 = nn.Conv2d(
-            in_planes, planes, kernel_size=3,
-            stride=stride, padding=1, bias=False
-        )
-
-        self.bn2 = nn.BatchNorm2d(planes)
-        self.relu2 = nn.Identity() if lin2 else nn.ReLU(inplace=True)
-        self.conv2 = nn.Conv2d(
-            planes, planes, kernel_size=3,
-            stride=1, padding=1, bias=False
-        )
-
-        self.shortcut = None
-        if stride != 1 or in_planes != planes:
-            self.shortcut = nn.Conv2d(
-                in_planes, planes, kernel_size=1,
-                stride=stride, bias=False
-            )
-
-    def forward(self, x):
-        # In Pre-activation, BN/ReLU happens BEFORE the convolution
-        out = self.relu1(self.bn1(x))
-        shortcut = self.shortcut(out) if self.shortcut is not None else x
-        out = self.conv1(out)
-        out = self.conv2(self.relu2(self.bn2(out)))
-        out += shortcut
-        return out
-
-
-class PreActResNet(nn.Module):
-    """
-    CIFAR-style Pre-activation ResNet with configurable linear layers.
-    """
-    def __init__(self, block, layers, k=64, num_classes=10, first_n_linear=0):
-        super().__init__()
-        self.in_planes = k
-        self.first_n_linear = first_n_linear
-        self.current_layer_idx = 0 
-
-        # Stem (Layer 0)
-        self.conv1 = nn.Conv2d(3, k, kernel_size=3, stride=1, padding=1, bias=False)
-        self.bn1 = nn.BatchNorm2d(k)
-        self.relu = nn.Identity() if self.current_layer_idx < first_n_linear else nn.ReLU(inplace=True)
-        self.current_layer_idx += 1
-
-        # Four stages
-        self.layer1 = self._make_layer(block, k, layers[0], stride=1)
-        self.layer2 = self._make_layer(block, 2 * k, layers[1], stride=2)
-        self.layer3 = self._make_layer(block, 4 * k, layers[2], stride=2)
-        self.layer4 = self._make_layer(block, 8 * k, layers[3], stride=2)
-
-        self.avgpool = nn.AdaptiveAvgPool2d((1, 1))
-        self.fc = nn.Linear(8 * k * block.expansion, num_classes)
-
-        # Initialization
-        for m in self.modules():
-            if isinstance(m, (nn.Conv2d, nn.Linear)):
-                nn.init.kaiming_uniform_(m.weight, nonlinearity='relu')
-                if m.bias is not None:
-                    nn.init.zeros_(m.bias)
-
-    def _make_layer(self, block, planes, num_blocks, stride):
-        strides = [stride] + [1] * (num_blocks - 1)
-        layers = []
-        for s in strides:
-            # Check linearity for the two conv-activations inside the block
-            lin1 = self.current_layer_idx < self.first_n_linear
-            self.current_layer_idx += 1
-            lin2 = self.current_layer_idx < self.first_n_linear
-            self.current_layer_idx += 1
-            
-            layers.append(block(self.in_planes, planes, s, lin1, lin2))
-            self.in_planes = planes * block.expansion
-        return nn.Sequential(*layers)
-
-    def forward(self, x):
-        x = self.relu(self.bn1(self.conv1(x)))
-        x = self.layer1(x)
-        x = self.layer2(x)
-        x = self.layer3(x)
-        x = self.layer4(x)
-        x = self.avgpool(x)
-        x = torch.flatten(x, 1)
-        x = self.fc(x)
-        return x
-    
 
 class BaseNet18ConstantWidth_CIFAR(nn.Module):
     """
@@ -197,11 +137,38 @@ class BaseNet18ConstantWidth_CIFAR(nn.Module):
         self.avgpool = nn.AdaptiveAvgPool2d((1, 1))
         self.fc = nn.Linear(k, num_classes)
 
-        for m in self.modules():
-            if isinstance(m, (nn.Conv2d, nn.Linear)):
-                nn.init.kaiming_uniform_(m.weight, nonlinearity='relu')
-                if m.bias is not None:
-                    nn.init.zeros_(m.bias)
+        # ----------------------------------------------------------------------
+        # CORRECTED INITIALIZATION LOGIC (Same as above)
+        # ----------------------------------------------------------------------
+        init.xavier_uniform_(self.conv1.weight)
+        if self.bn1.weight is not None:
+            init.constant_(self.bn1.weight, 1)
+            init.constant_(self.bn1.bias, 0)
+        
+        is_prev_linear = (first_n_linear > 0)
+
+        for block in self.blocks:
+            if is_prev_linear:
+                init.xavier_uniform_(block.conv.weight)
+            else:
+                init.kaiming_uniform_(block.conv.weight, nonlinearity='relu')
+            
+            if block.bn.weight is not None:
+                init.constant_(block.bn.weight, 1)
+                init.constant_(block.bn.bias, 0)
+
+            if isinstance(block.relu, nn.Identity):
+                is_prev_linear = True
+            else:
+                is_prev_linear = False
+
+        if is_prev_linear:
+            init.xavier_uniform_(self.fc.weight)
+        else:
+            init.kaiming_uniform_(self.fc.weight, nonlinearity='relu')
+        
+        if self.fc.bias is not None:
+            init.zeros_(self.fc.bias)
 
     def forward(self, x):
         x = self.relu(self.bn1(self.conv1(x)))
@@ -213,7 +180,133 @@ class BaseNet18ConstantWidth_CIFAR(nn.Module):
         return x
 
 # =========================================================
-# === Factory functions ===================================
+# === Pre-activation ResNet (with residuals) ==============
+# =========================================================
+
+class PreActBasicBlock(nn.Module):
+    """Pre-activation residual block with optional linearity for each activation."""
+    expansion = 1
+
+    def __init__(self, in_planes, planes, stride=1, lin1=False, lin2=False):
+        super().__init__()
+        self.bn1 = nn.BatchNorm2d(in_planes)
+        self.relu1 = nn.Identity() if lin1 else nn.ReLU(inplace=True)
+        self.conv1 = nn.Conv2d(
+            in_planes, planes, kernel_size=3,
+            stride=stride, padding=1, bias=False
+        )
+        
+        # --- INIT CONV1 ---
+        # The input to conv1 comes from relu1.
+        if lin1: 
+            init.xavier_uniform_(self.conv1.weight)
+        else:
+            init.kaiming_uniform_(self.conv1.weight, nonlinearity='relu')
+
+
+        self.bn2 = nn.BatchNorm2d(planes)
+        self.relu2 = nn.Identity() if lin2 else nn.ReLU(inplace=True)
+        self.conv2 = nn.Conv2d(
+            planes, planes, kernel_size=3,
+            stride=1, padding=1, bias=False
+        )
+        
+        # --- INIT CONV2 ---
+        # The input to conv2 comes from relu2.
+        if lin2:
+            init.xavier_uniform_(self.conv2.weight)
+        else:
+            init.kaiming_uniform_(self.conv2.weight, nonlinearity='relu')
+
+
+        self.shortcut = None
+        if stride != 1 or in_planes != planes:
+            self.shortcut = nn.Conv2d(
+                in_planes, planes, kernel_size=1,
+                stride=stride, bias=False
+            )
+            # --- INIT SHORTCUT ---
+            # Shortcut input comes from the same place as Conv1 (relu1 output)
+            if lin1:
+                init.xavier_uniform_(self.shortcut.weight)
+            else:
+                init.kaiming_uniform_(self.shortcut.weight, nonlinearity='relu')
+
+    def forward(self, x):
+        # In Pre-activation, BN/ReLU happens BEFORE the convolution
+        out = self.relu1(self.bn1(x))
+        shortcut = self.shortcut(out) if self.shortcut is not None else x
+        out = self.conv1(out)
+        out = self.conv2(self.relu2(self.bn2(out)))
+        out += shortcut
+        return out
+
+
+class PreActResNet(nn.Module):
+    """
+    CIFAR-style Pre-activation ResNet with configurable linear layers.
+    """
+    def __init__(self, block, layers, k=64, num_classes=10, first_n_linear=0):
+        super().__init__()
+        self.in_planes = k
+        self.first_n_linear = first_n_linear
+        self.current_layer_idx = 0 
+
+        # Stem (Layer 0)
+        self.conv1 = nn.Conv2d(3, k, kernel_size=3, stride=1, padding=1, bias=False)
+        self.bn1 = nn.BatchNorm2d(k)
+        self.relu = nn.Identity() if self.current_layer_idx < first_n_linear else nn.ReLU(inplace=True)
+        self.current_layer_idx += 1
+
+        # Init Stem (Input is Image -> Linear-ish)
+        init.xavier_uniform_(self.conv1.weight)
+        if self.bn1.weight is not None:
+            init.constant_(self.bn1.weight, 1)
+            init.constant_(self.bn1.bias, 0)
+
+        # Four stages
+        self.layer1 = self._make_layer(block, k, layers[0], stride=1)
+        self.layer2 = self._make_layer(block, 2 * k, layers[1], stride=2)
+        self.layer3 = self._make_layer(block, 4 * k, layers[2], stride=2)
+        self.layer4 = self._make_layer(block, 8 * k, layers[3], stride=2)
+
+        self.avgpool = nn.AdaptiveAvgPool2d((1, 1))
+        self.fc = nn.Linear(8 * k * block.expansion, num_classes)
+
+        # Init FC
+        # Input comes from block sum (effectively linear path) -> Xavier
+        init.xavier_uniform_(self.fc.weight)
+        if self.fc.bias is not None:
+            init.zeros_(self.fc.bias)
+
+    def _make_layer(self, block, planes, num_blocks, stride):
+        strides = [stride] + [1] * (num_blocks - 1)
+        layers = []
+        for s in strides:
+            # Check linearity for the two conv-activations inside the block
+            lin1 = self.current_layer_idx < self.first_n_linear
+            self.current_layer_idx += 1
+            lin2 = self.current_layer_idx < self.first_n_linear
+            self.current_layer_idx += 1
+            
+            layers.append(block(self.in_planes, planes, s, lin1, lin2))
+            self.in_planes = planes * block.expansion
+        return nn.Sequential(*layers)
+
+    def forward(self, x):
+        x = self.relu(self.bn1(self.conv1(x)))
+        x = self.layer1(x)
+        x = self.layer2(x)
+        x = self.layer3(x)
+        x = self.layer4(x)
+        x = self.avgpool(x)
+        x = torch.flatten(x, 1)
+        x = self.fc(x)
+        return x
+    
+
+# =========================================================
+# === Factory functions (Make sure these are included!) ===
 # =========================================================
 def basenet18(num_classes=10, first_n_linear=0, k=64):
     return BaseNet18_CIFAR(first_n_linear=first_n_linear, num_classes=num_classes, k=k)
@@ -227,6 +320,7 @@ def resnet18_preact(num_classes=10, k=64, first_n_linear=0):
 def resnet34_preact(num_classes=10, k=64, first_n_linear=0):
     """Pre-activation ResNet-34"""
     return PreActResNet(PreActBasicBlock, [3, 4, 6, 3], k=k, num_classes=num_classes, first_n_linear=first_n_linear)
+
 
 def basenet18_constant(num_classes=10, first_n_linear=0, k=64):
     return BaseNet18ConstantWidth_CIFAR(first_n_linear=first_n_linear, num_classes=num_classes, k=k)
