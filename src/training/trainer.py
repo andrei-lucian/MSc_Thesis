@@ -106,6 +106,7 @@ class Trainer:
             header += [f"mean_layer{i}" for i in range(num_layers)]
             header += [f"median_layer{i}" for i in range(num_layers)]
             header += [f"cossim_layer{i}" for i in range(num_layers)]
+            header += [f"fa_layer{i}" for i in range(num_layers)]
             
             writer.writerow(header)
 
@@ -163,8 +164,7 @@ class Trainer:
         Logs performance and preactivation metrics.
         index_name: "epoch" or "step"
         """
-        # --- FIX: Unpack 3 return values instead of 2 ---
-        means, medians, cossims = self.preact_logger.compute_all(self.test_loader)
+        means, medians, cossims, fracs = self.preact_logger.compute_all(self.test_loader)
         
         with open(self.log_file, "a", newline="") as f:
             writer = csv.writer(f)
@@ -174,6 +174,7 @@ class Trainer:
             row += means
             row += medians
             row += cossims
+            row += fracs
             
             writer.writerow(row)
             

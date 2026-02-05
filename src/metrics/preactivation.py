@@ -10,6 +10,7 @@ class PreactivationLogger:
         1. Mean: Standard center measure
         2. Median: Robust center measure
         3. Cosine Similarity: Linearity measure (1.0 = Linear, ~0.707 = ReLU)
+        4. Fraction Active: Raw sparsity measure (>0).
         """
         self.model = model
         self.sample_size = sample_size
@@ -18,9 +19,11 @@ class PreactivationLogger:
 
         self._hooks: List[torch.utils.hooks.RemovableHandle] = []
         
+        # Buffers for all 4 metrics
         self._buffers_mean = {}
         self._buffers_median = {}
         self._buffers_cossim = {}
+        self._buffers_active = {}  # <--- RE-ADDED
         
         self.layers: List[str] = []     
         self._alias_to_raw = {}         
@@ -52,10 +55,6 @@ class PreactivationLogger:
         # Register hooks
         # ---------------------------------------------------------
         for group, idx, alias, module, raw_name in collected:
-            # Debug print to confirm what we found
-            mod_type = module.__class__.__name__
-            # print(f"  -> Hooking {alias} ({mod_type})") 
-            
             h = module.register_forward_pre_hook(self._make_hook(alias, module))
             self._hooks.append(h)
             self.layers.append(alias)
@@ -63,7 +62,6 @@ class PreactivationLogger:
 
     def _make_hook(self, alias: str, module: nn.Module):
         # Robust check for Identity (Linear) layers
-        # Checks both class type and string name to be safe
         is_fixed_linear = isinstance(module, nn.Identity) or "Identity" in str(module.__class__)
 
         def hook(module, inputs):
@@ -87,8 +85,12 @@ class PreactivationLogger:
                 x_relu = F.relu(x_flat)
                 # eps=1e-8 prevents division by zero if vector is dead
                 cossim = F.cosine_similarity(x_flat, x_relu, dim=1, eps=1e-8)
-            
             self._buffers_cossim.setdefault(alias, []).append(cossim.cpu())
+
+            # 4. Fraction Active
+            # We calculate this raw (x > 0) to demonstrate the BN effect (pinned at 0.5)
+            active = (x_flat > 0).float().mean(dim=1)
+            self._buffers_active.setdefault(alias, []).append(active.cpu())
 
         return hook
 
@@ -110,6 +112,7 @@ class PreactivationLogger:
         self._buffers_mean.clear()
         self._buffers_median.clear()
         self._buffers_cossim.clear()
+        self._buffers_active.clear() # <--- Clear buffer
 
         collected = 0
 
@@ -131,8 +134,10 @@ class PreactivationLogger:
         means = self._compute_buffer(self._buffers_mean)
         medians = self._compute_buffer(self._buffers_median)
         cossims = self._compute_buffer(self._buffers_cossim)
+        fracs_active = self._compute_buffer(self._buffers_active) # <--- Compute
 
-        return means, medians, cossims
+        # Returns 4 lists now
+        return means, medians, cossims, fracs_active
 
     def close(self):
         for h in self._hooks:
