@@ -23,7 +23,7 @@ class PreactivationLogger:
         self._buffers_mean = {}
         self._buffers_median = {}
         self._buffers_cossim = {}
-        self._buffers_active = {}  # <--- RE-ADDED
+        self._buffers_active = {}
         
         self.layers: List[str] = []     
         self._alias_to_raw = {}         
