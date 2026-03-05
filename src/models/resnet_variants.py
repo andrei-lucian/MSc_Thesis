@@ -137,9 +137,7 @@ class BaseNet18ConstantWidth_CIFAR(nn.Module):
         self.avgpool = nn.AdaptiveAvgPool2d((1, 1))
         self.fc = nn.Linear(k, num_classes)
 
-        # ----------------------------------------------------------------------
-        # CORRECTED INITIALIZATION LOGIC (Same as above)
-        # ----------------------------------------------------------------------
+        # Corrected Initialization
         init.xavier_uniform_(self.conv1.weight)
         if self.bn1.weight is not None:
             init.constant_(self.bn1.weight, 1)
@@ -178,6 +176,86 @@ class BaseNet18ConstantWidth_CIFAR(nn.Module):
         x = torch.flatten(x, 1)
         x = self.fc(x)
         return x
+
+
+class BaseNet18_Inverted(nn.Module):
+    """
+    Inverted "Funnel" Architecture: Wide -> Narrow.
+    Used to test if early layers become non-linear when given sufficient width.
+    Structure: [512 -> 256 -> 128 -> 64] instead of [64 -> 128 -> 256 -> 512].
+    """
+    def __init__(self, first_n_linear=0, num_classes=10, k=64):
+        super().__init__()
+        self.k = k
+
+        # Stem: Starts VERY WIDE (8*k = 512)
+        self.conv1 = nn.Conv2d(3, 8 * k, kernel_size=3, stride=1, padding=1, bias=False)
+        self.bn1 = nn.BatchNorm2d(8 * k)
+        self.relu = nn.Identity() if first_n_linear > 0 else nn.ReLU(inplace=True)
+
+        # Inverted Configuration
+        # Stage 1: 512 channels
+        # Stage 2: 256 channels (downsample spatial, reduce channels)
+        # Stage 3: 128 channels (downsample spatial, reduce channels)
+        # Stage 4: 64 channels (downsample spatial, reduce channels)
+        cfg = (
+            [(8 * k, 1)] * 4 +                
+            [(4 * k, 2)] + [(4 * k, 1)] * 3 + 
+            [(2 * k, 2)] + [(2 * k, 1)] * 3 + 
+            [(k, 2)] + [(k, 1)] * 3           
+        )
+
+        self.blocks = nn.ModuleList()
+        in_channels = 8 * k # Start wide
+        for i, (out_channels, stride) in enumerate(cfg):
+            nonlinear = ((i + 1) >= first_n_linear)
+            self.blocks.append(BasicBlock(in_channels, out_channels, stride, nonlinear))
+            in_channels = out_channels
+
+        self.avgpool = nn.AdaptiveAvgPool2d((1, 1))
+        # Final linear layer takes 'k' (64) channels
+        self.fc = nn.Linear(k, num_classes)
+
+        # Corrected Initialization
+        init.xavier_uniform_(self.conv1.weight)
+        if self.bn1.weight is not None:
+            init.constant_(self.bn1.weight, 1)
+            init.constant_(self.bn1.bias, 0)
+        
+        is_prev_linear = (first_n_linear > 0)
+
+        for block in self.blocks:
+            if is_prev_linear:
+                init.xavier_uniform_(block.conv.weight)
+            else:
+                init.kaiming_uniform_(block.conv.weight, nonlinearity='relu')
+            
+            if block.bn.weight is not None:
+                init.constant_(block.bn.weight, 1)
+                init.constant_(block.bn.bias, 0)
+
+            if isinstance(block.relu, nn.Identity):
+                is_prev_linear = True
+            else:
+                is_prev_linear = False
+
+        if is_prev_linear:
+            init.xavier_uniform_(self.fc.weight)
+        else:
+            init.kaiming_uniform_(self.fc.weight, nonlinearity='relu')
+        
+        if self.fc.bias is not None:
+            init.zeros_(self.fc.bias)
+
+    def forward(self, x):
+        x = self.relu(self.bn1(self.conv1(x)))
+        for block in self.blocks:
+            x = block(x)
+        x = self.avgpool(x)
+        x = torch.flatten(x, 1)
+        x = self.fc(x)
+        return x
+
 
 # =========================================================
 # === Pre-activation ResNet (with residuals) ==============
@@ -258,7 +336,7 @@ class PreActResNet(nn.Module):
         self.relu = nn.Identity() if self.current_layer_idx < first_n_linear else nn.ReLU(inplace=True)
         self.current_layer_idx += 1
 
-        # Init Stem (Input is Image -> Linear-ish)
+        # Init Stem
         init.xavier_uniform_(self.conv1.weight)
         if self.bn1.weight is not None:
             init.constant_(self.bn1.weight, 1)
@@ -306,7 +384,7 @@ class PreActResNet(nn.Module):
     
 
 # =========================================================
-# === Factory functions (Make sure these are included!) ===
+# === Factory functions ===
 # =========================================================
 def basenet18(num_classes=10, first_n_linear=0, k=64):
     return BaseNet18_CIFAR(first_n_linear=first_n_linear, num_classes=num_classes, k=k)
@@ -324,3 +402,7 @@ def resnet34_preact(num_classes=10, k=64, first_n_linear=0):
 
 def basenet18_constant(num_classes=10, first_n_linear=0, k=64):
     return BaseNet18ConstantWidth_CIFAR(first_n_linear=first_n_linear, num_classes=num_classes, k=k)
+
+def basenet18_inverted(num_classes=10, first_n_linear=0, k=64):
+    """Inverted 'Funnel' BaseNet (Wide -> Narrow)"""
+    return BaseNet18_Inverted(first_n_linear=first_n_linear, num_classes=num_classes, k=k)

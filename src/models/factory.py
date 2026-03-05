@@ -1,4 +1,4 @@
-from src.models.resnet_variants import resnet18_preact, resnet34_preact, basenet18, basenet18_constant
+from src.models.resnet_variants import basenet18_inverted, resnet18_preact, resnet34_preact, basenet18, basenet18_constant
 from src.models.cnn import simple_cnn
 from src.models.transformer import Seq2SeqTransformer
 
@@ -46,6 +46,12 @@ def get_model(cfg, *args):
         )
     elif arch == "basenetconstant18":
         return basenet18_constant(
+            num_classes=num_classes, 
+            k=k, 
+            first_n_linear=first_n_linear
+        )
+    elif arch == "basenet18inverted":
+        return basenet18_inverted(
             num_classes=num_classes, 
             k=k, 
             first_n_linear=first_n_linear

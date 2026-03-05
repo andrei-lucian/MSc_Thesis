@@ -25,7 +25,7 @@ hydra:
 # === Default configuration hierarchy =====================
 # =========================================================
 defaults:
-  - model: resnet18        # default model (can override with model=basenet18)
+  - model: resnet18        # default model (can override with model="model_name")
   - dataset: cifar10
   - training: base
   - experiment: default
