@@ -124,6 +124,7 @@ class Trainer:
             out = self.model(x)
             loss = self.criterion(out, y)
             loss.backward()
+            torch.nn.utils.clip_grad_norm_(self.model.parameters(), max_norm=1.0)
             self.optimizer.step()
 
             if self.scheduler is not None:
