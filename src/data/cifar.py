@@ -35,3 +35,31 @@ class NoisyCIFAR(Dataset):
 		img, _ = self.base_dataset[idx]
 		label = self.targets[idx]
 		return img, label
+
+class SubsetCIFAR(Dataset):
+    """
+    Filters a dataset to only include samples from the first 'num_classes'.
+    Maintains the .targets attribute so it can be chained with NoisyCIFAR.
+    """
+    def __init__(self, base_dataset, num_classes):
+        self.base_dataset = base_dataset
+        self.num_classes = num_classes
+        
+        # Filter indices and targets for the requested number of classes
+        self.indices = []
+        self.targets = []
+        
+        for i, target in enumerate(base_dataset.targets):
+            if target < num_classes:
+                self.indices.append(i)
+                self.targets.append(target)
+
+    def __len__(self):
+        return len(self.indices)
+
+    def __getitem__(self, idx):
+        # Map the requested index to the original dataset's index
+        original_idx = self.indices[idx]
+        img, _ = self.base_dataset[original_idx]
+        label = self.targets[idx]
+        return img, label
