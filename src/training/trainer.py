@@ -74,24 +74,12 @@ class Trainer:
         # Output + logging setup
         # ------------------------------
         
-        # Safely extract variables from config
-        num_linear = getattr(cfg.model, "first_n_linear", 0)
-        subset_classes = getattr(cfg.dataset, "subset_classes", None) # Adjust this path if your subset_classes is at the root of cfg
-        noise_level = getattr(cfg.dataset, "label_noise", 0.0)
-
-        # --- Build a dynamic subfolder to prevent multirun overwrite ---
-        if num_linear != 0:
-            folder_name = f"linear_{num_linear}"
-        elif subset_classes is not None:
-            # e.g., "classes_20_noise_0.0"
-            folder_name = f"classes_{subset_classes}"
-
-        self.out_dir = Path(os.getcwd()) / folder_name
+        # We let Hydra handle the folder naming completely.
+        self.out_dir = Path(os.getcwd())
         self.out_dir.mkdir(parents=True, exist_ok=True)
 
         self.num_params = sum(p.numel() for p in self.model.parameters())
 
-        # Keep the filename as "metrics.csv" so your plotting scripts (rglob) still find it!
         self.log_file = self.out_dir / "metrics.csv"
         
         with open(self.log_file, "w", newline="") as f:
