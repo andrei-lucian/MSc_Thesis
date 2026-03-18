@@ -70,21 +70,30 @@ class Trainer:
         # ------------------------------
         self.preact_logger = PreactivationLogger(self.model)
 
-        # ------------------------------
+		# ------------------------------
         # Output + logging setup
         # ------------------------------
         
-        # --- Append 'linear_n' subfolder to prevent multirun overwrite ---
+        # Safely extract variables from config
         num_linear = getattr(cfg.model, "first_n_linear", 0)
+        subset_classes = getattr(cfg.dataset, "subset_classes", None) # Adjust this path if your subset_classes is at the root of cfg
+        noise_level = getattr(cfg.dataset, "label_noise", 0.0)
+
+        # --- Build a dynamic subfolder to prevent multirun overwrite ---
         if num_linear != 0:
-            self.out_dir = Path(os.getcwd()) / f"linear_{num_linear}"
-        else:
-            self.out_dir = Path(os.getcwd())
+            folder_name = f"linear_{num_linear}"
+        elif subset_classes is not None:
+            # e.g., "classes_20_noise_0.0"
+            folder_name = f"classes_{subset_classes}"
+
+        self.out_dir = Path(os.getcwd()) / folder_name
         self.out_dir.mkdir(parents=True, exist_ok=True)
 
         self.num_params = sum(p.numel() for p in self.model.parameters())
 
+        # Keep the filename as "metrics.csv" so your plotting scripts (rglob) still find it!
         self.log_file = self.out_dir / "metrics.csv"
+        
         with open(self.log_file, "w", newline="") as f:
             writer = csv.writer(f)
             # Metadata
