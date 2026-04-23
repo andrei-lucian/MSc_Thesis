@@ -4,8 +4,7 @@ from hydra.utils import get_original_cwd
 from torch.utils.data import DataLoader
 from torchvision import datasets, transforms
 
-# 1. Import SubsetCIFAR here
-from src.data.cifar import NoisyCIFAR, SubsetCIFAR 
+from src.data.cifar import NoisyCIFAR, SubsetCIFAR, CIFAR100Coarse 
 from src.data.iwslt import get_iwslt14 
 
 def get_dataset(cfg, seed=0):
@@ -31,7 +30,9 @@ def get_dataset(cfg, seed=0):
         else:  # "none"
             transform = transforms.ToTensor()
 
-        # Base datasets
+        # ---------------------------------------------------------
+        # 1. Base Datasets
+        # ---------------------------------------------------------
         train_dataset = datasets.__dict__[cfg.name](
             root=data_root, train=True, download=True, transform=transform
         )
@@ -40,7 +41,17 @@ def get_dataset(cfg, seed=0):
         )
 
         # ---------------------------------------------------------
-        # 2. Semantic Complexity Filter (Subset Classes)
+        # 2. Coarse Labels Filter (CIFAR-100 Only)
+        # ---------------------------------------------------------
+        # We do this first so num_classes updates to 20 before noise/subsetting
+        if name == "cifar100" and getattr(cfg, "coarse_labels", False):
+            print("Converting CIFAR-100 fine labels (100) to coarse superclasses (20).")
+            train_dataset = CIFAR100Coarse(train_dataset)
+            test_dataset = CIFAR100Coarse(test_dataset)
+            num_classes = 20  # Update class count for the model head and downstream wrappers
+
+        # ---------------------------------------------------------
+        # 3. Semantic Complexity Filter (Subset Classes)
         # ---------------------------------------------------------
         subset_classes = getattr(cfg, "subset_classes", None)
         if subset_classes is not None and subset_classes < num_classes:
@@ -48,7 +59,7 @@ def get_dataset(cfg, seed=0):
             train_dataset = SubsetCIFAR(train_dataset, num_classes=subset_classes)
             test_dataset = SubsetCIFAR(test_dataset, num_classes=subset_classes)
             
-            # 3. Update num_classes so the model head and noise wrapper scale correctly
+            # Update num_classes so the model head and noise wrapper scale correctly
             num_classes = subset_classes 
 
         # ---------------------------------------------------------
@@ -57,7 +68,7 @@ def get_dataset(cfg, seed=0):
         if getattr(cfg, "label_noise", 0.0) > 0:
             print(f"Applying {cfg.label_noise*100}% label noise across {num_classes} classes.")
             train_dataset = NoisyCIFAR(
-                train_dataset, num_classes, # This now correctly uses the subset count
+                train_dataset, num_classes, # This now correctly uses the coarse or subset count
                 noise_fraction=cfg.label_noise,
                 seed=seed
             )

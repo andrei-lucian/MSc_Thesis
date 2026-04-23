@@ -6,3 +6,4 @@ batch_size: 128
 label_noise: 0
 num_workers: 1
 subset_classes: 100
+coarse_labels: false

@@ -63,3 +63,42 @@ class SubsetCIFAR(Dataset):
         img, _ = self.base_dataset[original_idx]
         label = self.targets[idx]
         return img, label
+
+class CIFAR100Coarse(Dataset):
+    """
+    A Dataset wrapper that converts CIFAR-100 fine labels (0-99) 
+    into coarse superclass labels (0-19).
+    """
+    def __init__(self, base_dataset):
+        self.base_dataset = base_dataset
+        
+        # This is the official mapping from the CIFAR-100 fine classes to the 20 coarse classes.
+        # Index = fine_label, Value = coarse_label
+        self.fine_to_coarse_map = [
+             4,  1, 14,  8,  0,  6,  7,  7, 18,  3,  # 0-9
+             3, 14,  9, 18,  7, 11,  3,  9,  7, 11,  # 10-19
+             6, 11,  5, 10,  7,  6, 13, 15,  3, 15,  # 20-29
+             0, 11,  1, 10, 12, 14, 16,  9, 11,  5,  # 30-39
+             5, 19,  8,  8, 15, 13, 14, 17, 18, 10,  # 40-49
+            16,  4, 17,  4,  2,  0, 17,  4, 18, 17,  # 50-59
+            10,  3,  2, 12, 12, 16, 12,  1,  9, 19,  # 60-69
+             2, 10,  0,  1, 16, 12,  9, 13, 15, 13,  # 70-79
+            16, 19,  2,  4,  6, 19,  5,  5,  8, 19,  # 80-89
+            18,  1,  2, 15,  6,  0, 17,  8, 14, 13   # 90-99
+        ]
+        
+        # We also overwrite the targets list so this behaves like a standard dataset
+        # (Useful if you chain this with other wrappers later)
+        if hasattr(base_dataset, 'targets'):
+            self.targets = [self.fine_to_coarse_map[label] for label in base_dataset.targets]
+
+    def __len__(self):
+        return len(self.base_dataset)
+
+    def __getitem__(self, idx):
+        img, fine_label = self.base_dataset[idx]
+        
+        # Convert the fine label to the coarse label
+        coarse_label = self.fine_to_coarse_map[fine_label]
+        
+        return img, coarse_label
