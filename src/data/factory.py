@@ -9,12 +9,13 @@ from src.data.iwslt import get_iwslt14
 
 def get_dataset(cfg, seed=0):
     name = cfg.name.lower()
-
+    data_root = os.path.join(get_original_cwd(), "data")
+    
     if name in ["cifar10", "cifar100"]:
         # ------------------------
         # CIFAR-10/100
         # ------------------------
-        data_root = os.path.join(get_original_cwd(), "./data")
+        
         if name == "cifar10":
             num_classes = 10
         else:
@@ -30,9 +31,6 @@ def get_dataset(cfg, seed=0):
         else:  # "none"
             transform = transforms.ToTensor()
 
-        # ---------------------------------------------------------
-        # 1. Base Datasets
-        # ---------------------------------------------------------
         train_dataset = datasets.__dict__[cfg.name](
             root=data_root, train=True, download=True, transform=transform
         )
@@ -50,9 +48,6 @@ def get_dataset(cfg, seed=0):
             test_dataset = CIFAR100Coarse(test_dataset)
             num_classes = 20  # Update class count for the model head and downstream wrappers
 
-        # ---------------------------------------------------------
-        # 3. Semantic Complexity Filter (Subset Classes)
-        # ---------------------------------------------------------
         subset_classes = getattr(cfg, "subset_classes", None)
         if subset_classes is not None and subset_classes < num_classes:
             print(f"Subsetting {name} to {subset_classes} classes.")
@@ -66,22 +61,27 @@ def get_dataset(cfg, seed=0):
         # 4. Unstructured Complexity Filter (Label Noise)
         # ---------------------------------------------------------
         if getattr(cfg, "label_noise", 0.0) > 0:
-            print(f"Applying {cfg.label_noise*100}% label noise across {num_classes} classes.")
-            train_dataset = NoisyCIFAR(
-                train_dataset, num_classes, # This now correctly uses the coarse or subset count
-                noise_fraction=cfg.label_noise,
-                seed=seed
-            )
+            train_dataset = NoisyCIFAR(train_dataset, num_classes, noise_fraction=cfg.label_noise, seed=seed)
 
-        train_loader = DataLoader(
-            train_dataset, batch_size=cfg.batch_size, shuffle=True, num_workers=cfg.num_workers
-        )
-        test_loader = DataLoader(
-            test_dataset, batch_size=cfg.batch_size, shuffle=False, num_workers=cfg.num_workers
-        )
+    # ---------------------------------------------------------
+    # 2. SVHN (Street View House Numbers)
+    # ---------------------------------------------------------
+    elif name == "svhn":
+        num_classes = 10
+        # SVHN does not use CIFAR-style augmentations
+        transform = transforms.ToTensor()
         
-        return train_loader, test_loader, num_classes
+        # SVHN uses 'split' instead of 'train'
+        train_dataset = datasets.SVHN(
+            root=data_root, split='train', download=True, transform=transform
+        )
+        test_dataset = datasets.SVHN(
+            root=data_root, split='test', download=True, transform=transform
+        )
 
+    # ---------------------------------------------------------
+    # 3. IWSLT
+    # ---------------------------------------------------------
     elif name == "iwslt14":
         # ------------------------
         # IWSLT’14 De–En translation
@@ -91,3 +91,15 @@ def get_dataset(cfg, seed=0):
 
     else:
         raise ValueError(f"Unknown dataset: {cfg.name}")
+
+    # ---------------------------------------------------------
+    # Final DataLoader Construction
+    # ---------------------------------------------------------
+    train_loader = DataLoader(
+        train_dataset, batch_size=cfg.batch_size, shuffle=True, num_workers=cfg.num_workers
+    )
+    test_loader = DataLoader(
+        test_dataset, batch_size=cfg.batch_size, shuffle=False, num_workers=cfg.num_workers
+    )
+    
+    return train_loader, test_loader, num_classes

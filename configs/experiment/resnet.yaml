@@ -9,11 +9,11 @@ name: cnn
 seed: 0
 
 model:
-  width: 4  
+  width: 64  
 
 training:
   epochs: 1000
   optimizer: adam
 
 dataset:
-  label_noise: 0.15
+  label_noise: 0

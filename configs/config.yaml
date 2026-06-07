@@ -37,3 +37,6 @@ experiment:
   name: default
   seed: 0
   output_dir: outputs/${experiment.name}
+  mode: none
+  checkpoint_path: C:\Users\luord\Documents\GitHub\MSc_Thesis\results\BaseNet_w_checkpoints\2025-11-05_16-06-40\default\basenet18_width64_seed0_noise0\checkpoints\step_040000.pt
+  ood_dataset_name: svhn

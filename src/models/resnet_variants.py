@@ -106,7 +106,6 @@ class BaseNet18_CIFAR(nn.Module):
         x = self.fc(x)
         return x
 
-
 class BaseNet18ConstantWidth_CIFAR(nn.Module):
     """
     Constant-width variant of BaseNet18.
@@ -120,53 +119,59 @@ class BaseNet18ConstantWidth_CIFAR(nn.Module):
         self.bn1 = nn.BatchNorm2d(k)
         self.relu = nn.Identity() if first_n_linear > 0 else nn.ReLU(inplace=True)
 
+        # All strides set to 1 for constant spatial resolution
         cfg = (
             [(k, 1)] * 4 +
-            [(k, 2)] + [(k, 1)] * 3 +
-            [(k, 2)] + [(k, 1)] * 3 +
-            [(k, 2)] + [(k, 1)] * 3
+            [(k, 1)] + [(k, 1)] * 3 +
+            [(k, 1)] + [(k, 1)] * 3 +
+            [(k, 1)] + [(k, 1)] * 3
         )
 
         self.blocks = nn.ModuleList()
         in_channels = k
         for i, (out_channels, stride) in enumerate(cfg):
+            # i=0 is the first block (Layer 1 overall, since Stem is Layer 0)
             nonlinear = ((i + 1) >= first_n_linear)
+            # Assuming BasicBlock accepts (in_channels, out_channels, stride, nonlinear)
             self.blocks.append(BasicBlock(in_channels, out_channels, stride, nonlinear))
             in_channels = out_channels
 
         self.avgpool = nn.AdaptiveAvgPool2d((1, 1))
-        self.fc = nn.Linear(k, num_classes)
+        
+        # REMOVED BIAS: Prevents the final un-normalized vector from exploding
+        self.fc = nn.Linear(k, num_classes, bias=False)
 
-        # Corrected Initialization
-        init.xavier_uniform_(self.conv1.weight)
+        # ==========================================
+        # ORTHOGONAL INITIALIZATION
+        # ==========================================
+        
+        # 1. Initialize Stem
+        stem_gain = 1.0 if isinstance(self.relu, nn.Identity) else init.calculate_gain('relu')
+        init.orthogonal_(self.conv1.weight, gain=stem_gain)
+        
         if self.bn1.weight is not None:
             init.constant_(self.bn1.weight, 1)
             init.constant_(self.bn1.bias, 0)
         
-        is_prev_linear = (first_n_linear > 0)
-
+        # 2. Initialize Blocks
         for block in self.blocks:
-            if is_prev_linear:
-                init.xavier_uniform_(block.conv.weight)
+            # Apply a gain of 1.0 for linear pass-throughs, and sqrt(2) for ReLUs
+            if isinstance(block.relu, nn.Identity):
+                block_gain = 1.0
             else:
-                init.kaiming_uniform_(block.conv.weight, nonlinearity='relu')
+                block_gain = init.calculate_gain('relu')
+                
+            init.orthogonal_(block.conv.weight, gain=block_gain)
             
+            # Standard BatchNorm init
             if block.bn.weight is not None:
                 init.constant_(block.bn.weight, 1)
                 init.constant_(block.bn.bias, 0)
 
-            if isinstance(block.relu, nn.Identity):
-                is_prev_linear = True
-            else:
-                is_prev_linear = False
+        # 3. Initialize Final Classifier
+        # The FC layer acts linearly (no ReLU after it), so it gets a gain of 1.0
+        init.orthogonal_(self.fc.weight, gain=1.0)
 
-        if is_prev_linear:
-            init.xavier_uniform_(self.fc.weight)
-        else:
-            init.kaiming_uniform_(self.fc.weight, nonlinearity='relu')
-        
-        if self.fc.bias is not None:
-            init.zeros_(self.fc.bias)
 
     def forward(self, x):
         x = self.relu(self.bn1(self.conv1(x)))
@@ -176,7 +181,6 @@ class BaseNet18ConstantWidth_CIFAR(nn.Module):
         x = torch.flatten(x, 1)
         x = self.fc(x)
         return x
-
 
 class BaseNet18_Inverted(nn.Module):
     """
