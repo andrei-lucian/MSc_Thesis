@@ -8,7 +8,7 @@ from src.utils.seed import set_seed
 from src.data.factory import get_dataset
 from src.models.factory import get_model
 from src.training.trainer import Trainer
-from src.utils.ood_evaluator import OODEvaluator
+# from src.utils.ood_evaluator import OODEvaluator
 import torch
 from src.metrics.preactivation import PreactivationLogger
 
@@ -52,9 +52,9 @@ def main(cfg: DictConfig):
 
 		logger = PreactivationLogger(model, sample_size=500, device=torch.device("cuda" if torch.cuda.is_available() else "cpu"))
 
-		# 2. Initialize Evaluator with the logger
-		evaluator = OODEvaluator(model, test_loader, ood_loader, cfg, logger)
-		evaluator.run()
+		# # 2. Initialize Evaluator with the logger
+		# evaluator = OODEvaluator(model, test_loader, ood_loader, cfg, logger)
+		# evaluator.run()
 		logger.close()
 		
 	else:
